@@ -9,4 +9,9 @@ export default defineConfig({
       "@": path.resolve(__dirname, "src"),
     },
   },
+  // Avoid clashing with another dev app / service worker that may have claimed 5173.
+  server: {
+    port: 5174,
+    strictPort: false,
+  },
 });
