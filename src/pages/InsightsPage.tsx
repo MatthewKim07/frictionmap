@@ -1,166 +1,455 @@
+import { motion } from "framer-motion";
 import { useMemo } from "react";
 
-import { BarRow } from "@/components/dashboard/BarRow";
-import { CategoryPill, SeverityPill } from "@/components/ui/pills";
+import {
+  CategoryHoursBarChart,
+  SeverityDistributionChart,
+  TeamCostBarChart,
+} from "@/components/charts/InsightsCharts";
+import { InsightsMetricCard } from "@/components/dashboard/InsightsMetricCard";
+import { CategoryPill, SeverityPill, StatusPill } from "@/components/ui/pills";
+import {
+  AVERAGE_HOURLY_COST,
+  FRICTION_CATEGORIES,
+  REPORT_STATUSES,
+  SEVERITIES,
+  TEAMS,
+} from "@/constants/friction";
 import {
   buildDashboardMetrics,
+  buildInsightsPlainSummary,
   calculateMonthlyCost,
-  calculateMonthlyHours,
   filterReports,
+  formatCurrency,
+  formatHours,
+  formatReportDate,
+  getAverageFrictionScore,
+  getCriticalHighCount,
+  getHighestCostProcess,
+  getOpenReportCount,
+  getProcessCostRanking,
   getRecentReports,
+  getSeverityCounts,
+  getTeamMonthlyCosts,
 } from "@/lib/frictionCalculations";
-import { categoryColorHex } from "@/lib/categoryMeta";
 import { useFrictionStore } from "@/store/frictionStore";
-import type { FrictionCategory } from "@/types";
+import type { FrictionCategory, ReportStatus, Severity, Team } from "@/types";
 
-const TEAM_BAR_COLORS = ["#E45A4C", "#E89B3C", "#B6C84A", "#6E7A4A", "#E45A4C", "#E89B3C", "#B6C84A", "#6E7A4A"];
+const STATUS_LABEL: Record<ReportStatus, string> = {
+  open: "Open",
+  reviewing: "Reviewing",
+  planned: "Planned",
+  resolved: "Resolved",
+};
 
 export function InsightsPage() {
   const reports = useFrictionStore((s) => s.reports);
   const filters = useFrictionStore((s) => s.filters);
+  const setFilters = useFrictionStore((s) => s.setFilters);
+  const clearFilters = useFrictionStore((s) => s.clearFilters);
   const setPage = useFrictionStore((s) => s.setPage);
 
   const filtered = useMemo(() => filterReports(reports, filters), [reports, filters]);
+  const hasAnyReports = reports.length > 0;
+  const isFilteredEmpty = hasAnyReports && filtered.length === 0;
 
-  const metrics = useMemo(() => buildDashboardMetrics(filtered), [filtered]);
-
-  const cats = Object.entries(metrics.byCategoryHours).sort((a, b) => b[1] - a[1]);
-  const teams = Object.entries(metrics.byTeamHours).sort((a, b) => b[1] - a[1]);
-  const maxCat = cats[0]?.[1] ?? 1;
-  const maxTeam = teams[0]?.[1] ?? 1;
-
-  const processes = useMemo(
-    () =>
-      [...filtered]
-        .map((r) => ({
-          ...r,
-          monthly: calculateMonthlyHours(r),
-          cost: calculateMonthlyCost(r),
-        }))
-        .sort((a, b) => b.cost - a.cost)
-        .slice(0, 5),
-    [filtered],
+  const metrics = useMemo(() => buildDashboardMetrics(filtered, AVERAGE_HOURLY_COST), [filtered]);
+  const topCatCost = useMemo(
+    () => Math.round(metrics.topCategoryMonthlyHours * AVERAGE_HOURLY_COST),
+    [metrics.topCategoryMonthlyHours],
   );
-  const maxProcessCost = processes[0]?.cost ?? 1;
+  const highestProcess = useMemo(() => getHighestCostProcess(filtered), [filtered]);
+  const openCount = useMemo(() => getOpenReportCount(filtered), [filtered]);
+  const critHigh = useMemo(() => getCriticalHighCount(filtered), [filtered]);
+  const avgScore = useMemo(() => getAverageFrictionScore(filtered), [filtered]);
+  const summaryText = useMemo(() => buildInsightsPlainSummary(filtered, AVERAGE_HOURLY_COST), [filtered]);
 
-  const recent = useMemo(() => getRecentReports(filtered, 8), [filtered]);
+  const categoryChartData = useMemo(
+    () =>
+      Object.entries(metrics.byCategoryHours)
+        .map(([name, hours]) => ({
+          name,
+          hours: Math.round(hours * 10) / 10,
+          category: name as FrictionCategory,
+        }))
+        .filter((d) => d.hours > 0),
+    [metrics.byCategoryHours],
+  );
+
+  const teamCostData = useMemo(() => {
+    return getTeamMonthlyCosts(filtered, AVERAGE_HOURLY_COST)
+      .filter((t) => t.monthlyCost > 0)
+      .map((t) => ({ name: t.team, cost: t.monthlyCost }));
+  }, [filtered]);
+
+  const severityData = useMemo(() => getSeverityCounts(filtered), [filtered]);
+  const processRank = useMemo(() => getProcessCostRanking(filtered, AVERAGE_HOURLY_COST).slice(0, 10), [filtered]);
+  const recent = useMemo(() => getRecentReports(filtered, 12), [filtered]);
+
+  const filtersActive =
+    filters.selectedTeam !== null ||
+    filters.selectedCategory !== null ||
+    filters.selectedStatus !== null ||
+    filters.selectedSeverity !== null;
+
+  if (!hasAnyReports) {
+    return (
+      <div className="fade-in">
+        <h1>Insights</h1>
+        <p className="subtitle">You need a few friction reports before trends show up here.</p>
+        <div className="card" style={{ maxWidth: 520, marginTop: 24 }}>
+          <p style={{ margin: "0 0 16px", color: "var(--ink-soft)", lineHeight: 1.55 }}>
+            Once teammates log slowdowns, you will see hours, cost, and where to focus first — no spreadsheets
+            required.
+          </p>
+          <button type="button" className="btn coral" onClick={() => setPage("submit")}>
+            Report friction
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (isFilteredEmpty) {
+    return (
+      <div className="fade-in">
+        <h1>Insights</h1>
+        <p className="subtitle">No reports match the current filters.</p>
+        <div className="card" style={{ maxWidth: 520, marginTop: 24 }}>
+          <p style={{ margin: "0 0 16px", color: "var(--ink-soft)", lineHeight: 1.55 }}>
+            Try widening the team, category, status, or severity filters to see data again.
+          </p>
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            <button type="button" className="btn" onClick={() => clearFilters()}>
+              Clear filters
+            </button>
+            <button type="button" className="btn secondary" onClick={() => setPage("submit")}>
+              Report friction
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="fade-in">
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 28 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 20, flexWrap: "wrap", gap: 16 }}>
         <div>
           <h1>Insights</h1>
-          <p className="subtitle">Where time and money go this month.</p>
+          <p className="subtitle">Where time and money leak — filtered from live reports.</p>
         </div>
         <button type="button" className="btn secondary" onClick={() => setPage("roadmap")}>
           See fix roadmap →
         </button>
       </div>
 
-      <div className="grid-2" style={{ marginBottom: 20 }}>
-        <div className="card">
-          <div className="section-head">
-            <h2>Hours lost by category</h2>
-            <span style={{ fontSize: 12, color: "var(--ink-mute)" }}>{Math.round(maxCat)}h max</span>
-          </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-            {cats.map(([cat, h]) => (
-              <BarRow
-                key={cat}
-                name={cat}
-                value={Math.round(h)}
-                max={Math.round(maxCat)}
-                color={categoryColorHex(cat as FrictionCategory)}
-              />
+      <div
+        className="card"
+        style={{ marginBottom: 20, display: "flex", flexWrap: "wrap", gap: 12, alignItems: "flex-end" }}
+        role="search"
+        aria-label="Filter insights"
+      >
+        <div className="field" style={{ minWidth: 160, flex: "1 1 140px", margin: 0 }}>
+          <label htmlFor="ins-team">Team</label>
+          <select
+            id="ins-team"
+            className="select"
+            value={filters.selectedTeam ?? ""}
+            onChange={(e) => {
+              const v = e.target.value;
+              setFilters({ selectedTeam: v === "" ? null : (v as Team) });
+            }}
+          >
+            <option value="">All teams</option>
+            {TEAMS.map((t) => (
+              <option key={t} value={t}>
+                {t}
+              </option>
             ))}
-          </div>
+          </select>
         </div>
+        <div className="field" style={{ minWidth: 180, flex: "1 1 160px", margin: 0 }}>
+          <label htmlFor="ins-cat">Category</label>
+          <select
+            id="ins-cat"
+            className="select"
+            value={filters.selectedCategory ?? ""}
+            onChange={(e) => {
+              const v = e.target.value;
+              setFilters({ selectedCategory: v === "" ? null : (v as FrictionCategory) });
+            }}
+          >
+            <option value="">All categories</option>
+            {FRICTION_CATEGORIES.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="field" style={{ minWidth: 140, flex: "1 1 120px", margin: 0 }}>
+          <label htmlFor="ins-status">Status</label>
+          <select
+            id="ins-status"
+            className="select"
+            value={filters.selectedStatus ?? ""}
+            onChange={(e) => {
+              const v = e.target.value;
+              setFilters({ selectedStatus: v === "" ? null : (v as ReportStatus) });
+            }}
+          >
+            <option value="">All statuses</option>
+            {REPORT_STATUSES.map((s) => (
+              <option key={s} value={s}>
+                {STATUS_LABEL[s]}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="field" style={{ minWidth: 140, flex: "1 1 120px", margin: 0 }}>
+          <label htmlFor="ins-sev">Severity</label>
+          <select
+            id="ins-sev"
+            className="select"
+            value={filters.selectedSeverity ?? ""}
+            onChange={(e) => {
+              const v = e.target.value;
+              setFilters({ selectedSeverity: v === "" ? null : (v as Severity) });
+            }}
+          >
+            <option value="">All severities</option>
+            {SEVERITIES.map((s) => (
+              <option key={s} value={s}>
+                {s.charAt(0).toUpperCase() + s.slice(1)}
+              </option>
+            ))}
+          </select>
+        </div>
+        <button
+          type="button"
+          className="btn secondary"
+          onClick={() => clearFilters()}
+          disabled={!filtersActive}
+          style={{ alignSelf: "flex-end" }}
+        >
+          Clear filters
+        </button>
+      </div>
 
-        <div className="card">
-          <div className="section-head">
-            <h2>Hours lost by team</h2>
-            <span style={{ fontSize: 12, color: "var(--ink-mute)" }}>{teams.length} teams</span>
-          </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-            {teams.map(([t, h], i) => (
-              <BarRow
-                key={t}
-                name={t}
-                value={Math.round(h)}
-                max={Math.round(maxTeam)}
-                color={TEAM_BAR_COLORS[i % TEAM_BAR_COLORS.length]!}
-              />
-            ))}
-          </div>
-        </div>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 220px), 1fr))",
+          gap: 16,
+          marginBottom: 24,
+        }}
+      >
+        <InsightsMetricCard
+          label="Monthly hours lost"
+          value={formatHours(metrics.monthlyHoursLost)}
+          explanation="Estimated hours across all reports in this view."
+          impactLabel="Answers: How much time are we losing?"
+          icon="◷"
+          tone="coral"
+          delay={0}
+        />
+        <InsightsMetricCard
+          label="Monthly cost leakage"
+          value={formatCurrency(metrics.monthlyCostLost)}
+          explanation={`Blended rate ${formatCurrency(AVERAGE_HOURLY_COST)}/hr.`}
+          impactLabel="Answers: What is this costing?"
+          icon="$"
+          tone="amber"
+          delay={0.03}
+        />
+        <InsightsMetricCard
+          label="Annualized risk"
+          value={formatCurrency(metrics.annualizedCostLost)}
+          explanation="Monthly cost × 12 — rough annual exposure."
+          icon="◎"
+          tone="amber"
+          delay={0.06}
+        />
+        <InsightsMetricCard
+          label="Open reports"
+          value={openCount}
+          explanation={`${openCount} with status Open · ${metrics.reportCount} reports in this view.`}
+          impactLabel="Backlog still active"
+          icon="◐"
+          tone="lime"
+          delay={0.09}
+        />
+        <InsightsMetricCard
+          label="Most expensive category"
+          value={metrics.topCategory}
+          explanation={`About ${formatCurrency(topCatCost)} per month at current volume.`}
+          icon="▦"
+          tone="coral"
+          delay={0.12}
+        />
+        <InsightsMetricCard
+          label="Highest-cost process"
+          value={highestProcess.process || "—"}
+          explanation={
+            highestProcess.monthlyCost > 0
+              ? `${formatCurrency(Math.round(highestProcess.monthlyCost))} per month aggregated.`
+              : "No process data in this view."
+          }
+          impactLabel="Start investigations here"
+          icon="→"
+          tone="amber"
+          delay={0.15}
+        />
+        <InsightsMetricCard
+          label="Avg. friction score"
+          value={avgScore.toLocaleString()}
+          explanation="Higher = more monthly drag weighted by severity and frequency."
+          icon="≈"
+          tone="lime"
+          delay={0.18}
+        />
+        <InsightsMetricCard
+          label="High + critical"
+          value={critHigh}
+          explanation="Reports flagged high or critical severity."
+          impactLabel="Triage these first"
+          icon="!"
+          tone="coral"
+          delay={0.21}
+        />
+      </div>
+
+      <motion.div
+        className="card"
+        style={{
+          marginBottom: 24,
+          background: "linear-gradient(135deg, var(--paper-2) 0%, var(--surface) 100%)",
+          borderColor: "var(--rule-strong)",
+        }}
+        initial={{ opacity: 0.9 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.25 }}
+      >
+        <h2 style={{ fontSize: 17, marginBottom: 8 }}>What this means</h2>
+        <p style={{ margin: 0, fontSize: 15, color: "var(--ink-soft)", lineHeight: 1.6 }}>{summaryText}</p>
+      </motion.div>
+
+      <div className="grid-2" style={{ marginBottom: 20 }}>
+        <CategoryHoursBarChart
+          data={categoryChartData}
+          title="Hours lost by category"
+          summary="Which friction types consume the most time each month (sorted high to low)."
+        />
+        <TeamCostBarChart
+          data={teamCostData}
+          title="Monthly cost by team"
+          summary="Which teams carry the largest estimated dollar drag at the blended hourly rate."
+        />
+      </div>
+
+      <div style={{ marginBottom: 20, maxWidth: 480, marginLeft: "auto", marginRight: "auto" }}>
+        <SeverityDistributionChart
+          data={severityData}
+          title="Severity distribution"
+          summary="How reports break down by disruption level — numbers repeated in the table for screen readers."
+        />
       </div>
 
       <div className="card" style={{ marginBottom: 20 }}>
         <div className="section-head">
-          <h2>Highest-cost processes</h2>
-          <span style={{ fontSize: 12, color: "var(--ink-mute)" }}>Monthly estimate</span>
+          <h2>Process / tool cost ranking</h2>
+          <span style={{ fontSize: 12, color: "var(--ink-mute)" }}>Grouped by tool or workflow</span>
         </div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-          {processes.map((p) => {
-            const pct = Math.max(2, Math.round((p.cost / maxProcessCost) * 100));
-            return (
-              <div key={p.id} style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 12, alignItems: "center" }}>
-                <div>
-                  <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 8 }}>
-                    <span style={{ fontWeight: 500 }}>{p.title}</span>
-                    <span style={{ fontSize: 12, color: "var(--ink-mute)" }}>{p.team}</span>
-                  </div>
-                  <div className="bar">
-                    <div className="bar-fill" style={{ width: `${pct}%`, background: categoryColorHex(p.category) }} />
-                  </div>
-                </div>
-                <div style={{ textAlign: "right" }}>
-                  <div style={{ fontWeight: 600, fontSize: 16, fontVariantNumeric: "tabular-nums" }}>
-                    ${Math.round(p.cost).toLocaleString()}
-                  </div>
-                  <div style={{ fontSize: 12, color: "var(--ink-mute)" }}>{Math.round(p.monthly)}h/mo</div>
-                </div>
-              </div>
-            );
-          })}
+        <p style={{ fontSize: 13, color: "var(--ink-soft)", margin: "0 0 14px" }}>
+          Ranked by estimated monthly cost. Use this to decide what to fix before one-off annoyances.
+        </p>
+        <div style={{ overflowX: "auto" }}>
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Process / tool</th>
+                <th>Team</th>
+                <th>Category</th>
+                <th style={{ textAlign: "right" }}>Monthly hours</th>
+                <th style={{ textAlign: "right" }}>Monthly cost</th>
+              </tr>
+            </thead>
+            <tbody>
+              {processRank.length === 0 ? (
+                <tr>
+                  <td colSpan={5} style={{ color: "var(--ink-mute)" }}>
+                    No process clusters in this view.
+                  </td>
+                </tr>
+              ) : (
+                processRank.map((row) => (
+                  <tr key={row.process}>
+                    <td style={{ fontWeight: 500 }}>{row.process}</td>
+                    <td style={{ color: "var(--ink-soft)" }}>{row.teamLabel}</td>
+                    <td>
+                      <CategoryPill category={row.category} />
+                    </td>
+                    <td style={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}>
+                      {formatHours(row.monthlyHours)}
+                    </td>
+                    <td style={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}>
+                      {formatCurrency(row.monthlyCost)}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
         </div>
       </div>
 
       <div className="card">
         <div className="section-head">
           <h2>Recent reports</h2>
-          <span style={{ fontSize: 12, color: "var(--ink-mute)" }}>{filtered.length} in view</span>
+          <span style={{ fontSize: 12, color: "var(--ink-mute)" }}>{filtered.length} in this view</span>
         </div>
-        <table className="table">
-          <thead>
-            <tr>
-              <th>Report</th>
-              <th>Team</th>
-              <th>Category</th>
-              <th>Severity</th>
-              <th style={{ textAlign: "right" }}>Hours</th>
-              <th style={{ textAlign: "right" }}>When</th>
-            </tr>
-          </thead>
-          <tbody>
-            {recent.map((r) => (
-              <tr key={r.id}>
-                <td style={{ fontWeight: 500 }}>{r.title}</td>
-                <td style={{ color: "var(--ink-soft)" }}>{r.team}</td>
-                <td>
-                  <CategoryPill category={r.category} />
-                </td>
-                <td>
-                  <SeverityPill severity={r.severity} />
-                </td>
-                <td style={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{r.timeLostHours}h</td>
-                <td style={{ textAlign: "right", color: "var(--ink-mute)", fontSize: 13 }}>
-                  {r.whenLabel ?? "—"}
-                </td>
+        <p style={{ fontSize: 13, color: "var(--ink-soft)", margin: "0 0 12px" }}>
+          Latest submissions with estimated monthly cost (not one-off hours).
+        </p>
+        <div style={{ overflowX: "auto" }}>
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Report</th>
+                <th>Team</th>
+                <th>Category</th>
+                <th>Severity</th>
+                <th style={{ textAlign: "right" }}>Monthly cost</th>
+                <th>Status</th>
+                <th style={{ textAlign: "right" }}>Created</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {recent.map((r) => (
+                <tr key={r.id}>
+                  <td style={{ fontWeight: 500, maxWidth: 220 }}>{r.title}</td>
+                  <td style={{ color: "var(--ink-soft)" }}>{r.team}</td>
+                  <td>
+                    <CategoryPill category={r.category} />
+                  </td>
+                  <td>
+                    <SeverityPill severity={r.severity} />
+                  </td>
+                  <td style={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}>
+                    {formatCurrency(Math.round(calculateMonthlyCost(r, AVERAGE_HOURLY_COST)))}
+                  </td>
+                  <td>
+                    <StatusPill status={r.status} />
+                  </td>
+                  <td style={{ textAlign: "right", color: "var(--ink-mute)", fontSize: 13, whiteSpace: "nowrap" }}>
+                    {formatReportDate(r.createdAt)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );
