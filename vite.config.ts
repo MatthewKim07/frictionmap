@@ -3,6 +3,8 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
 export default defineConfig({
+  // Expose NEXT_PUBLIC_* alongside VITE_* so Supabase env matches common naming.
+  envPrefix: ["VITE_", "NEXT_PUBLIC_"],
   plugins: [react()],
   resolve: {
     alias: {

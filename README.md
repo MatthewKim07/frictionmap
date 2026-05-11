@@ -52,9 +52,33 @@ FrictionMap quantifies hidden workflow drag in dollars and hours so teams can:
 - **Frontend:** React 18 + TypeScript
 - **Build tool:** Vite 5
 - **State:** Zustand + persist middleware (localStorage)
+- **Backend (progressive):** Supabase (optional; app falls back safely when not configured)
 - **Charts:** Recharts
 - **Animation:** Framer Motion
 - **Styling:** Global CSS design system (`src/styles/global.css`)
+
+## Supabase Setup (Optional)
+
+FrictionMap runs in **Local demo mode** by default. Supabase is optional progressive enhancement.
+
+1. Create a Supabase project.
+2. Apply schema from:
+   - `docs/supabase-schema.sql`
+3. Add env vars in `.env.local`:
+
+```bash
+VITE_SUPABASE_URL=your_supabase_project_url
+VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
+```
+
+Alternative variable names also supported:
+
+```bash
+NEXT_PUBLIC_SUPABASE_URL=...
+NEXT_PUBLIC_SUPABASE_ANON_KEY=...
+```
+
+If vars are missing or Supabase is unavailable, the app stays usable with local/demo persistence and shows a subtle mode indicator.
 
 ## Running Locally
 
@@ -80,6 +104,7 @@ npm run preview
 4. Open **Insights** to show team/category/process breakdowns.
 5. Open **Fix Roadmap** to show top ranked bottlenecks and status actions.
 6. Generate and export **Business Impact Report**.
+7. Optional: refresh page and show persistence mode indicator (`Supabase connected` / `Local demo mode` / `Offline fallback`).
 
 ## Future Improvements
 
@@ -105,10 +130,11 @@ Key directories:
 
 - `src/pages` — Overview, Report Friction, Insights, Fix Roadmap
 - `src/store/frictionStore.ts` — app state, persistence, scenarios, selectors
-- `src/lib` — calculations, roadmap generation, report generation
+- `src/lib` — calculations, roadmap generation, report generation, Supabase/repository adapters
 - `src/data` — scenario datasets and defaults
 - `src/components` — shared UI, layout, charts, modals, demo controls
 - `docs/devpost-submission-draft.md` — copy-ready submission draft
+- `docs/supabase-schema.sql` — SQL schema + index + RLS notes
 
 ---
 

@@ -7,10 +7,12 @@ export function PersistHydrationNotifier() {
   useEffect(() => {
     if (useFrictionStore.persist.hasHydrated()) {
       useFrictionStore.getState().flushPersistRecoverIfAny();
+      void useFrictionStore.getState().initializeReports();
       return undefined;
     }
     return useFrictionStore.persist.onFinishHydration(() => {
       useFrictionStore.getState().flushPersistRecoverIfAny();
+      void useFrictionStore.getState().initializeReports();
     });
   }, []);
 

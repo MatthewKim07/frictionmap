@@ -177,6 +177,19 @@ input, select, textarea { font-family: inherit; }
   font-size: 13px;
   color: var(--ink-mute);
 }
+.data-mode-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--rule-strong);
+  background: var(--paper-2);
+  color: var(--ink-soft);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
 .avatar {
   width: 32px; height: 32px; border-radius: 50%;
   background: var(--amber);
@@ -593,7 +606,8 @@ button.link:focus-visible {
     flex-basis: 100%;
     justify-content: flex-start;
   }
-  .header-end .header-org { display: none; }
+  .header-end .header-org,
+  .header-end .data-mode-pill { display: none; }
 }
 
 @media (max-width: 640px) {

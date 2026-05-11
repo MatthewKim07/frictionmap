@@ -18,7 +18,15 @@ import {
 } from "@/data/demoScenarioTypes";
 import { getDefaultReportsSnapshot } from "@/data/frictionReports";
 import { type FrictionFilters, buildDashboardMetrics, filterReports } from "@/lib/frictionCalculations";
+import {
+  createReport as repoCreateReport,
+  deleteReport as repoDeleteReport,
+  getReports as repoGetReports,
+  replaceReports as repoReplaceReports,
+  updateReport as repoUpdateReport,
+} from "@/lib/reportRepository";
 import { generateRoadmapItems } from "@/lib/roadmap";
+import type { DataConnectionMode } from "@/lib/supabase";
 import type { FrictionReport } from "@/types";
 
 export type AppPage = "overview" | "submit" | "insights" | "roadmap";
@@ -192,6 +200,9 @@ interface FrictionStoreState {
   page: AppPage;
   toast: ToastState;
   impactReportModalOpen: boolean;
+  isLoadingReports: boolean;
+  reportError: string | null;
+  dataConnectionMode: DataConnectionMode;
 
   hourlyRate: number;
   demoScenarioId: DemoScenarioId;
@@ -211,6 +222,7 @@ interface FrictionStoreState {
   /** Swap demo datasets with confirmation assumed by caller. */
   loadDemoScenario: (id: DemoScenarioId) => void;
   clearPersistRecoverNotice: () => void;
+  initializeReports: () => Promise<void>;
 
   addReport: (payload: NewFrictionPayload) => FrictionReport;
   updateReport: (id: string, updates: Partial<FrictionReport>) => void;
@@ -231,6 +243,9 @@ export const useFrictionStore = create<FrictionStoreState>()(
       page: "overview",
       toast: null,
       impactReportModalOpen: false,
+      isLoadingReports: false,
+      reportError: null,
+      dataConnectionMode: "local-demo",
       hourlyRate: sanitizeHourlyRate(undefined),
       demoScenarioId: "operations",
       persistRecoverNotice: null,
@@ -264,12 +279,45 @@ export const useFrictionStore = create<FrictionStoreState>()(
 
       setHourlyRate: (value) => set({ hourlyRate: sanitizeHourlyRate(value) }),
 
+      initializeReports: async () => {
+        set({ isLoadingReports: true, reportError: null });
+        try {
+          const res = await repoGetReports();
+          const fallback = get().reports;
+          const next =
+            res.data.length > 0
+              ? sanitizeReportsArray(res.data).reports
+              : fallback.length > 0
+                ? fallback
+                : getDefaultReportsSnapshot();
+          set({
+            reports: next,
+            dataConnectionMode: res.mode,
+            reportError: res.warning ?? null,
+          });
+          if (res.warning) get().pulseToast(res.warning);
+        } catch {
+          set({
+            dataConnectionMode: "offline-fallback",
+            reportError: "Could not load remote data. Using local demo reports.",
+          });
+          get().pulseToast("Could not load remote data. Using local demo reports.");
+        } finally {
+          set({ isLoadingReports: false });
+        }
+      },
+
       loadDemoScenario: (id) => {
         const safe = sanitizeScenarioId(id);
+        const nextReports = cloneScenarioReports(safe);
         set({
           demoScenarioId: safe,
-          reports: cloneScenarioReports(safe),
+          reports: nextReports,
           filters: { ...defaultFilters },
+        });
+        void repoReplaceReports(nextReports).then((res) => {
+          set({ dataConnectionMode: res.mode, reportError: res.warning ?? null });
+          if (res.warning) get().pulseToast(res.warning);
         });
         get().pulseToast(`Loaded demo scenario: ${DEMO_SCENARIO_LABELS[safe]}.`);
       },
@@ -288,31 +336,56 @@ export const useFrictionStore = create<FrictionStoreState>()(
         set((state) => ({
           reports: [report, ...state.reports],
         }));
+        void repoCreateReport(report).then((res) => {
+          set({ dataConnectionMode: res.mode, reportError: res.warning ?? null });
+          if (res.warning) get().pulseToast(res.warning);
+        });
         return report;
       },
 
-      updateReport: (id, updates) =>
+      updateReport: (id, updates) => {
         set((s) => ({
           reports: s.reports.map((r) => (r.id === id ? { ...r, ...updates } : r)),
-        })),
+        }));
+        void repoUpdateReport(id, updates).then((res) => {
+          set({ dataConnectionMode: res.mode, reportError: res.warning ?? null });
+          if (res.warning) get().pulseToast(res.warning);
+        });
+      },
 
-      setClusterReportsStatus: (category, process, status) =>
+      setClusterReportsStatus: (category, process, status) => {
         set((s) => ({
           reports: s.reports.map((r) =>
             r.category === category && r.process === process ? { ...r, status } : r,
           ),
-        })),
+        }));
+        const current = get().reports;
+        void repoReplaceReports(current).then((res) => {
+          set({ dataConnectionMode: res.mode, reportError: res.warning ?? null });
+          if (res.warning) get().pulseToast(res.warning);
+        });
+      },
 
-      deleteReport: (id) =>
+      deleteReport: (id) => {
         set((s) => ({
           reports: s.reports.filter((r) => r.id !== id),
-        })),
+        }));
+        void repoDeleteReport(id).then((res) => {
+          set({ dataConnectionMode: res.mode, reportError: res.warning ?? null });
+          if (res.warning) get().pulseToast(res.warning);
+        });
+      },
 
       resetDemoData: () => {
         const id = get().demoScenarioId;
         set({
           reports: cloneScenarioReports(id),
           filters: { ...defaultFilters },
+        });
+        const current = get().reports;
+        void repoReplaceReports(current).then((res) => {
+          set({ dataConnectionMode: res.mode, reportError: res.warning ?? null });
+          if (res.warning) get().pulseToast(res.warning);
         });
         get().pulseToast("Reports reset to the current demo scenario baseline.");
       },

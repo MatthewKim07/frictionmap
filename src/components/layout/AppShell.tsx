@@ -16,8 +16,15 @@ export function AppShell({ children }: { children: ReactNode }) {
   const setPage = useFrictionStore((s) => s.setPage);
   const toast = useFrictionStore((s) => s.toast);
   const resetDemoData = useFrictionStore((s) => s.resetDemoData);
+  const dataConnectionMode = useFrictionStore((s) => s.dataConnectionMode);
 
   const current = TABS.find((t) => t.id === page) ?? TABS[0];
+  const modeLabel =
+    dataConnectionMode === "supabase-connected"
+      ? "Supabase connected"
+      : dataConnectionMode === "offline-fallback"
+        ? "Offline fallback"
+        : "Local demo mode";
 
   const confirmReset = () => {
     if (
@@ -60,6 +67,13 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
 
           <div className="header-end">
+            <span
+              className="data-mode-pill"
+              title="Persistence mode"
+              aria-label={`Data mode: ${modeLabel}`}
+            >
+              {modeLabel}
+            </span>
             <button type="button" className="btn-reset-demo" onClick={confirmReset} aria-label="Reset reports to scenario baseline">
               Reset demo
             </button>
