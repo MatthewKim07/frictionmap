@@ -1,4 +1,4 @@
-import type { FrictionCategory, RoadmapPriorityLevel, Severity } from "@/types";
+import type { FrictionCategory, ReportStatus, RoadmapPriorityLevel, Severity } from "@/types";
 import { categoryMeta } from "@/lib/categoryMeta";
 
 export function CategoryPill({ category }: { category: FrictionCategory }) {
@@ -47,6 +47,30 @@ export function RoadmapPriorityPill({ level }: { level: RoadmapPriorityLevel }) 
     <span className={`pill ${tone}`}>
       <span className="dot" />
       {level}
+    </span>
+  );
+}
+
+const STATUS_LABEL: Record<ReportStatus, string> = {
+  open: "Open",
+  reviewing: "Reviewing",
+  planned: "Planned",
+  resolved: "Resolved",
+};
+
+function statusTone(status: ReportStatus): "coral" | "amber" | "lime" | "ink" {
+  if (status === "open") return "coral";
+  if (status === "reviewing" || status === "planned") return "amber";
+  if (status === "resolved") return "lime";
+  return "ink";
+}
+
+export function StatusPill({ status }: { status: ReportStatus }) {
+  const tone = statusTone(status);
+  return (
+    <span className={`pill ${tone}`}>
+      <span className="dot" />
+      {STATUS_LABEL[status]}
     </span>
   );
 }
