@@ -36,6 +36,7 @@ const defaultFilters: FrictionFilters = {
   selectedTeam: null,
   selectedCategory: null,
   selectedStatus: null,
+  selectedSeverity: null,
 };
 
 const CAT_SET = new Set<string>(FRICTION_CATEGORIES);
