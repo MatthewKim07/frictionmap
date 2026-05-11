@@ -50,6 +50,31 @@ export function calculateFrictionScore(report: FrictionReport): number {
   return calculateMonthlyHours(report) * severityMultiplier(report.severity) * frequencyMultiplier(report.frequency);
 }
 
+const CADENCE_PHRASE: Record<Frequency, string> = {
+  once: "If it happens once",
+  monthly: "If it happens every month",
+  weekly: "If it happens every week",
+  daily: "If it happens every day",
+};
+
+/**
+ * Plain-English impact line for previews and confirmations (uses shared calculators).
+ */
+export function buildImpactNarrative(report: FrictionReport): string {
+  const hours = calculateMonthlyHours(report);
+  const cost = Math.round(calculateMonthlyCost(report));
+  const hoursDisp = hours >= 10 ? Math.round(hours) : Math.round(hours * 10) / 10;
+
+  const impact =
+    report.severity === "critical" || report.severity === "high"
+      ? "a high-impact workflow drag"
+      : report.severity === "medium"
+        ? "a meaningful slowdown"
+        : "lighter friction, but it still adds up";
+
+  return `This looks like ${impact}. ${CADENCE_PHRASE[report.frequency]}, it may cost about ${hoursDisp} hours or $${cost.toLocaleString()} per month.`;
+}
+
 export function calculateTotalMonthlyHours(reports: FrictionReport[]): number {
   return reports.reduce((sum, r) => sum + calculateMonthlyHours(r), 0);
 }
