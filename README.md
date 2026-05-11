@@ -8,7 +8,7 @@ Internal-operations prototype that surfaces workflow friction as hours lost, est
 | -------- | ------ |
 | Build | [Vite](https://vitejs.dev/) 5 |
 | UI | React 18 + TypeScript |
-| State | [Zustand](https://github.com/pmndrs/zustand) (`src/store/useFrictionStore.ts`) |
+| State | [Zustand](https://github.com/pmndrs/zustand) + `persist` (`src/store/frictionStore.ts`, localStorage) |
 | Styling | Global CSS (`src/styles/global.css`) — original warm palette and layout preserved |
 | Animations / charts (next steps) | `framer-motion` and `recharts` are installed but not wired yet |
 
@@ -22,15 +22,16 @@ src/
   main.tsx
   styles/global.css       # Design tokens, layout, components (from original export)
   types/index.ts          # FrictionReport, RoadmapItem, DashboardMetrics, re-exports
+  constants/
+    friction.ts           # Taxonomy, AVERAGE_HOURLY_COST, process pick list
   data/
-    constants.ts          # Categories, teams, blended rate, enums
-    mockReports.ts        # Seed FrictionReport rows (realistic copy)
-    fixRoadmap.ts         # Mock RoadmapItem proposals
+    frictionReports.ts    # Seed dataset (reset + storage fallback)
   lib/
-    calculations.ts       # Hours/cost/score math (single source of truth)
-    categoryMeta.ts       # Category labels + chart colors
+    frictionCalculations.ts  # Hours, cost, grouping, filters, dashboard metrics
+    roadmap.ts            # Derived roadmap clusters + priority scoring
+    categoryMeta.ts       # Category → pill tone + chart colors
   store/
-    useFrictionStore.ts   # Reports list, navigation, toast, addReport
+    frictionStore.ts      # Persisted reports, CRUD, filters API, selectors
   components/
     layout/AppShell.tsx
     dashboard/            # Metric cards, bar rows
@@ -59,7 +60,7 @@ Path alias: `@/` → `src/` (see `vite.config.ts`).
 
 ```bash
 npm install          # first-time setup
-npm run dev          # Vite dev server (default http://localhost:5173)
+npm run dev          # Vite dev server (default http://localhost:5174 — avoids SW/port clashes with other apps)
 npm run build        # TypeScript check + production bundle → dist/
 npm run preview      # Serve dist/ locally
 ```
