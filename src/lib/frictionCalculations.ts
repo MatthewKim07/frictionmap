@@ -163,9 +163,9 @@ export function groupReportsBySeverity(reports: FrictionReport[]): Record<string
 export function getTopCategory(reports: FrictionReport[]): {
   category: FrictionCategory;
   monthlyHours: number;
-} {
+} | null {
   if (!reports.length) {
-    return { category: "Manual data entry", monthlyHours: 0 };
+    return null;
   }
   const byCat = groupReportsByCategory(reports);
   let bestCategory = reports[0]!.category;
@@ -178,6 +178,32 @@ export function getTopCategory(reports: FrictionReport[]): {
     }
   }
   return { category: bestCategory, monthlyHours: bestHours };
+}
+
+export interface CategoryImpactRow {
+  category: FrictionCategory;
+  monthlyHours: number;
+  monthlyCost: number;
+}
+
+/** Category breakdown for dashboards — hours and cost use shared calculators. */
+export function getCategoryImpactRows(
+  reports: FrictionReport[],
+  hourlyRate: number = AVERAGE_HOURLY_COST,
+): CategoryImpactRow[] {
+  if (!reports.length) return [];
+  const byCat = groupReportsByCategory(reports);
+  return Object.entries(byCat)
+    .map(([category, rows]) => {
+      const monthlyHours = rows.reduce((s, r) => s + calculateMonthlyHours(r), 0);
+      return {
+        category: category as FrictionCategory,
+        monthlyHours,
+        monthlyCost: Math.round(monthlyHours * hourlyRate),
+      };
+    })
+    .filter((r) => r.monthlyHours > 0)
+    .sort((a, b) => b.monthlyCost - a.monthlyCost);
 }
 
 export function getHighestCostProcess(reports: FrictionReport[]): {
@@ -290,6 +316,7 @@ export function buildInsightsPlainSummary(reports: FrictionReport[], hourlyRate:
   if (!reports.length) return "";
 
   const top = getTopCategory(reports);
+  if (!top) return "";
   const topCatCost = Math.round(top.monthlyHours * hourlyRate);
   const proc = getHighestCostProcess(reports);
   const crit = getCriticalHighCount(reports);
@@ -336,8 +363,8 @@ export function buildDashboardMetrics(
     monthlyCostLost,
     annualizedCostLost,
     reportCount: reports.length,
-    topCategory: top.category,
-    topCategoryMonthlyHours: Math.round(top.monthlyHours),
+    topCategory: top?.category ?? null,
+    topCategoryMonthlyHours: top ? Math.round(top.monthlyHours) : 0,
     byCategoryHours,
     byTeamHours,
   };

@@ -282,8 +282,12 @@ export function InsightsPage() {
         />
         <InsightsMetricCard
           label="Most expensive category"
-          value={metrics.topCategory}
-          explanation={`About ${formatCurrency(topCatCost)} per month at current volume.`}
+          value={metrics.topCategory ?? "—"}
+          explanation={
+            metrics.topCategory
+              ? `About ${formatCurrency(topCatCost)} per month at current volume.`
+              : "No category data in this view."
+          }
           icon="▦"
           tone="coral"
           delay={0.12}

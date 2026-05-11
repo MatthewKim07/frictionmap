@@ -64,7 +64,7 @@ export interface DashboardMetrics {
   monthlyCostLost: number;
   annualizedCostLost: number;
   reportCount: number;
-  topCategory: FrictionCategory;
+  topCategory: FrictionCategory | null;
   topCategoryMonthlyHours: number;
   byCategoryHours: Record<string, number>;
   byTeamHours: Record<string, number>;
