@@ -1,4 +1,4 @@
-import { AVERAGE_HOURLY_COST } from "@/constants/friction";
+import { AVERAGE_HOURLY_COST, SEVERITIES } from "@/constants/friction";
 import type {
   FrictionCategory,
   Frequency,
@@ -12,7 +12,44 @@ export interface FrictionFilters {
   selectedTeam: Team | null;
   selectedCategory: FrictionCategory | null;
   selectedStatus: ReportStatus | null;
+  selectedSeverity: Severity | null;
 }
+
+/** USD, whole dollars, en-US. */
+export function formatCurrency(value: number): string {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 0,
+  }).format(value);
+}
+
+/** Hours for dashboards — avoids noisy decimals. */
+export function formatHours(value: number): string {
+  if (!Number.isFinite(value)) return "0 hrs";
+  if (value >= 100) return `${Math.round(value)} hrs`;
+  const r = Math.round(value * 10) / 10;
+  return `${r} hrs`;
+}
+
+export function formatReportDate(iso: string): string {
+  try {
+    return new Intl.DateTimeFormat("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    }).format(new Date(iso));
+  } catch {
+    return "—";
+  }
+}
+
+const SEVERITY_CHART_LABEL: Record<Severity, string> = {
+  low: "Low",
+  medium: "Medium",
+  high: "High",
+  critical: "Critical",
+};
 
 export function frequencyMultiplier(frequency: Frequency): number {
   const m: Record<Frequency, number> = {
@@ -162,8 +199,109 @@ export function filterReports(reports: FrictionReport[], filters: FrictionFilter
     if (filters.selectedTeam && r.team !== filters.selectedTeam) return false;
     if (filters.selectedCategory && r.category !== filters.selectedCategory) return false;
     if (filters.selectedStatus && r.status !== filters.selectedStatus) return false;
+    if (filters.selectedSeverity && r.severity !== filters.selectedSeverity) return false;
     return true;
   });
+}
+
+export function getOpenReportCount(reports: FrictionReport[]): number {
+  return reports.filter((r) => r.status === "open").length;
+}
+
+export function getCriticalHighCount(reports: FrictionReport[]): number {
+  return reports.filter((r) => r.severity === "critical" || r.severity === "high").length;
+}
+
+export function getAverageFrictionScore(reports: FrictionReport[]): number {
+  if (!reports.length) return 0;
+  const sum = reports.reduce((s, r) => s + calculateFrictionScore(r), 0);
+  return Math.round(sum / reports.length);
+}
+
+export function getSeverityCounts(reports: FrictionReport[]): { severity: Severity; label: string; count: number }[] {
+  const m: Record<Severity, number> = { low: 0, medium: 0, high: 0, critical: 0 };
+  for (const r of reports) m[r.severity]++;
+  return SEVERITIES.map((severity) => ({
+    severity,
+    label: SEVERITY_CHART_LABEL[severity],
+    count: m[severity],
+  }));
+}
+
+export interface ProcessCostRow {
+  process: string;
+  teamLabel: string;
+  category: FrictionCategory;
+  monthlyHours: number;
+  monthlyCost: number;
+  reportCount: number;
+}
+
+/** Aggregated by process/tool, sorted by monthly cost descending. */
+export function getProcessCostRanking(
+  reports: FrictionReport[],
+  hourlyRate: number = AVERAGE_HOURLY_COST,
+): ProcessCostRow[] {
+  const byProcess = groupReportsByProcess(reports);
+  return Object.entries(byProcess)
+    .map(([process, rows]) => {
+      const monthlyHours = rows.reduce((s, r) => s + calculateMonthlyHours(r), 0);
+      const monthlyCost = Math.round(monthlyHours * hourlyRate);
+      const teams = [...new Set(rows.map((r) => r.team))];
+      const teamLabel = teams.length === 1 ? teams[0]! : `${teams.length} teams`;
+      const category = rows[0]!.category;
+      return { process, teamLabel, category, monthlyHours, monthlyCost, reportCount: rows.length };
+    })
+    .sort((a, b) => b.monthlyCost - a.monthlyCost);
+}
+
+export interface TeamCostRow {
+  team: Team;
+  monthlyHours: number;
+  monthlyCost: number;
+}
+
+export function getTeamMonthlyCosts(
+  reports: FrictionReport[],
+  hourlyRate: number = AVERAGE_HOURLY_COST,
+): TeamCostRow[] {
+  const byTeam = groupReportsByTeam(reports);
+  return Object.entries(byTeam)
+    .map(([team, rows]) => {
+      const monthlyHours = rows.reduce((s, r) => s + calculateMonthlyHours(r), 0);
+      return {
+        team: team as Team,
+        monthlyHours,
+        monthlyCost: Math.round(monthlyHours * hourlyRate),
+      };
+    })
+    .sort((a, b) => b.monthlyCost - a.monthlyCost);
+}
+
+/**
+ * Rule-based manager summary for the current filtered dataset.
+ */
+export function buildInsightsPlainSummary(reports: FrictionReport[], hourlyRate: number = AVERAGE_HOURLY_COST): string {
+  if (!reports.length) return "";
+
+  const top = getTopCategory(reports);
+  const topCatCost = Math.round(top.monthlyHours * hourlyRate);
+  const proc = getHighestCostProcess(reports);
+  const crit = getCriticalHighCount(reports);
+
+  let text = `${top.category} is currently the largest source of lost time, costing an estimated ${formatCurrency(topCatCost)} per month.`;
+
+  if (proc.process && proc.monthlyCost > 0) {
+    text += ` The highest-cost process cluster is ${proc.process} (${formatCurrency(Math.round(proc.monthlyCost))} per month).`;
+  }
+
+  if (crit > 0) {
+    text += ` ${crit} ${crit === 1 ? "report is" : "reports are"} high or critical severity — worth triaging before lower-impact items.`;
+  } else {
+    text += " No high or critical severity in this view; still review recurring medium drag so it does not compound.";
+  }
+
+  return text;
 }
 
 export function buildDashboardMetrics(
