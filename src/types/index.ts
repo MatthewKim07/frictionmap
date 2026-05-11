@@ -39,6 +39,8 @@ export interface FrictionReport {
 /** Roadmap row derived from grouped reports (category + process). */
 export interface DerivedRoadmapItem {
   id: string;
+  /** Short headline for cards and copy/export (often report title or process cluster). */
+  problemTitle: string;
   problem: string;
   category: FrictionCategory;
   process: string;
@@ -50,6 +52,9 @@ export interface DerivedRoadmapItem {
   priorityLevel: RoadmapPriorityLevel;
   whyItMatters: string;
   suggestedFix: string;
+  /** Concrete first operational step by category. */
+  firstStep: string;
+  /** Derived from related report statuses (updates when reports are updated). */
   status: ReportStatus;
 }
 

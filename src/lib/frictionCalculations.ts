@@ -32,6 +32,11 @@ export function formatHours(value: number): string {
   return `${r} hrs`;
 }
 
+export function formatFrequencyLabel(f: Frequency): string {
+  if (f === "once") return "Once";
+  return f.charAt(0).toUpperCase() + f.slice(1);
+}
+
 export function formatReportDate(iso: string): string {
   try {
     return new Intl.DateTimeFormat("en-US", {
