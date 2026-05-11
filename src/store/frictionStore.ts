@@ -96,6 +96,12 @@ interface FrictionStoreState {
 
   addReport: (payload: NewFrictionPayload) => FrictionReport;
   updateReport: (id: string, updates: Partial<FrictionReport>) => void;
+  /** Set all reports in a category+process cluster to the same status (roadmap progress). */
+  setClusterReportsStatus: (
+    category: FrictionReport["category"],
+    process: string,
+    status: FrictionReport["status"],
+  ) => void;
   deleteReport: (id: string) => void;
   resetDemoData: () => void;
 }
@@ -137,6 +143,13 @@ export const useFrictionStore = create<FrictionStoreState>()(
       updateReport: (id, updates) =>
         set((s) => ({
           reports: s.reports.map((r) => (r.id === id ? { ...r, ...updates } : r)),
+        })),
+
+      setClusterReportsStatus: (category, process, status) =>
+        set((s) => ({
+          reports: s.reports.map((r) =>
+            r.category === category && r.process === process ? { ...r, status } : r,
+          ),
         })),
 
       deleteReport: (id) =>
@@ -183,7 +196,7 @@ export function selectDashboardMetrics(state: FrictionStoreState) {
 }
 
 export function selectRoadmapItems(state: FrictionStoreState) {
-  return generateRoadmapItems(selectFilteredReports(state));
+  return generateRoadmapItems(state.reports);
 }
 
 export { AVERAGE_HOURLY_COST };
