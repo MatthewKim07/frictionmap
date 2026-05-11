@@ -168,7 +168,7 @@ export function generateBusinessImpactReport(
   const openCount = getOpenReportCount(reports);
   const critHigh = getCriticalHighCount(reports);
   const highestProcess = getHighestCostProcess(reports);
-  const roadmapItems = generateRoadmapItems(reports);
+  const roadmapItems = generateRoadmapItems(reports, hourlyRate);
   const roadmapTop = roadmapItems[0];
 
   const stats: BusinessImpactReportStats = {

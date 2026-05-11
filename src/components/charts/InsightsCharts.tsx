@@ -126,8 +126,8 @@ export function TeamCostBarChart({
               }}
             />
             <Bar dataKey="cost" name="Cost" radius={[0, 6, 6, 0]} isAnimationActive animationDuration={400}>
-              {sorted.map((_, i) => (
-                <Cell key={i} fill={TEAM_CHART_COLORS[i % TEAM_CHART_COLORS.length]} />
+              {sorted.map((row, i) => (
+                <Cell key={`${row.name}-${row.cost}-${i}`} fill={TEAM_CHART_COLORS[i % TEAM_CHART_COLORS.length]} />
               ))}
             </Bar>
           </BarChart>

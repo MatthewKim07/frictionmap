@@ -1,10 +1,12 @@
 import { motion } from "framer-motion";
 import { useMemo } from "react";
 
+import { DemoControlsPanel } from "@/components/demo/DemoControlsPanel";
 import { BarRow } from "@/components/dashboard/BarRow";
 import { InsightsMetricCard } from "@/components/dashboard/InsightsMetricCard";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { CategoryPill, RoadmapPriorityPill, SeverityPill, StatusPill } from "@/components/ui/pills";
-import { AVERAGE_HOURLY_COST } from "@/constants/friction";
+import { MIN_HOURLY_RATE, MAX_HOURLY_RATE } from "@/constants/friction";
 import {
   buildDashboardMetrics,
   calculateMonthlyCost,
@@ -27,20 +29,21 @@ function previewFix(text: string, max = 140): string {
 
 export function OverviewPage() {
   const reports = useFrictionStore((s) => s.reports);
+  const hourlyRate = useFrictionStore((s) => s.hourlyRate);
   const setPage = useFrictionStore((s) => s.setPage);
   const setImpactReportModalOpen = useFrictionStore((s) => s.setImpactReportModalOpen);
 
-  const metrics = useMemo(() => buildDashboardMetrics(reports, AVERAGE_HOURLY_COST), [reports]);
+  const metrics = useMemo(() => buildDashboardMetrics(reports, hourlyRate), [reports, hourlyRate]);
   const openCount = useMemo(() => getOpenReportCount(reports), [reports]);
   const highestProcess = useMemo(() => getHighestCostProcess(reports), [reports]);
-  const topRoadmap = useMemo(() => generateRoadmapItems(reports)[0] ?? null, [reports]);
+  const topRoadmap = useMemo(() => generateRoadmapItems(reports, hourlyRate)[0] ?? null, [reports, hourlyRate]);
   const recentFive = useMemo(() => getRecentReports(reports, 5), [reports]);
-  const categoryRows = useMemo(() => getCategoryImpactRows(reports, AVERAGE_HOURLY_COST), [reports]);
+  const categoryRows = useMemo(() => getCategoryImpactRows(reports, hourlyRate), [reports, hourlyRate]);
   const maxCatHours = categoryRows[0]?.monthlyHours ?? 1;
 
   const topCategoryLabel = metrics.topCategory ?? "—";
   const topCategorySub = metrics.topCategory
-    ? `${formatHours(metrics.topCategoryMonthlyHours)} · ${formatCurrency(Math.round(metrics.topCategoryMonthlyHours * AVERAGE_HOURLY_COST))}/mo`
+    ? `${formatHours(metrics.topCategoryMonthlyHours)} · ${formatCurrency(Math.round(metrics.topCategoryMonthlyHours * hourlyRate))}/mo`
     : "Submit reports to see which category drives the most drag.";
 
   const processSub =
@@ -50,6 +53,8 @@ export function OverviewPage() {
 
   return (
     <div className="fade-in">
+      <DemoControlsPanel />
+
       <motion.section
         aria-labelledby="overview-hero-heading"
         initial={{ opacity: 0, y: 8 }}
@@ -102,7 +107,7 @@ export function OverviewPage() {
           <InsightsMetricCard
             label="Monthly cost leakage"
             value={formatCurrency(metrics.monthlyCostLost)}
-            explanation={`Loaded cost rate · $${AVERAGE_HOURLY_COST}/hr blended average.`}
+            explanation={`Blended rate ${formatCurrency(hourlyRate)}/hr (${MIN_HOURLY_RATE}–${MAX_HOURLY_RATE} in settings).`}
             icon="$"
             tone="amber"
             delay={0.04}
@@ -245,7 +250,17 @@ export function OverviewPage() {
             </button>
           </div>
           {recentFive.length === 0 ? (
-            <p style={{ margin: 0, color: "var(--ink-soft)" }}>No reports yet. Be the first to submit one.</p>
+            <EmptyState
+              title="No recent reports"
+              description="Submit friction from the field or load a demo scenario so this list fills in."
+            >
+              <button type="button" className="btn coral" onClick={() => setPage("submit")}>
+                Report friction
+              </button>
+              <button type="button" className="btn secondary" onClick={() => setImpactReportModalOpen(true)}>
+                Generate impact report
+              </button>
+            </EmptyState>
           ) : (
             <div style={{ overflowX: "auto" }}>
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, minWidth: 520 }}>
@@ -291,7 +306,7 @@ export function OverviewPage() {
                           whiteSpace: "nowrap",
                         }}
                       >
-                        {formatCurrency(Math.round(calculateMonthlyCost(r)))}
+                        {formatCurrency(Math.round(calculateMonthlyCost(r, hourlyRate)))}
                       </td>
                       <td style={{ padding: "10px 0 10px 8px" }}>
                         <StatusPill status={r.status} />
@@ -310,7 +325,14 @@ export function OverviewPage() {
             <span style={{ fontSize: 12, color: "var(--ink-mute)" }}>Hours & cost / month</span>
           </div>
           {categoryRows.length === 0 ? (
-            <p style={{ margin: 0, color: "var(--ink-soft)" }}>Categories will appear after you add reports.</p>
+            <EmptyState
+              title="No category mix yet"
+              description="Once reports exist, you will see how hours and dollars stack by friction type."
+            >
+              <button type="button" className="btn coral" onClick={() => setPage("submit")}>
+                Report friction
+              </button>
+            </EmptyState>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 16, marginTop: 6 }}>
               {categoryRows.map((row) => (

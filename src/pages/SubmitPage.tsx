@@ -4,7 +4,6 @@ import { useCallback, useMemo, useRef, useState, type FormEvent } from "react";
 import { CategoryPill, SeverityPill, StatusPill } from "@/components/ui/pills";
 import { Pill } from "@/components/ui/Pill";
 import {
-  AVERAGE_HOURLY_COST,
   FREQUENCIES,
   FRICTION_CATEGORIES,
   PROCESS_OPTIONS,
@@ -65,6 +64,7 @@ export function SubmitPage() {
   const addReport = useFrictionStore((s) => s.addReport);
   const setPage = useFrictionStore((s) => s.setPage);
   const reports = useFrictionStore((s) => s.reports);
+  const hourlyRate = useFrictionStore((s) => s.hourlyRate);
 
   const titleRef = useRef<HTMLInputElement>(null);
   const descriptionRef = useRef<HTMLTextAreaElement>(null);
@@ -209,7 +209,7 @@ export function SubmitPage() {
       try {
         const report = addReport(payload);
         const monthlyHours = calculateMonthlyHours(report);
-        const monthlyCost = Math.round(calculateMonthlyCost(report, AVERAGE_HOURLY_COST));
+        const monthlyCost = Math.round(calculateMonthlyCost(report, hourlyRate));
         setSubmitImpact({
           monthlyHours: Math.round(monthlyHours * 10) / 10,
           monthlyCost,
@@ -322,7 +322,7 @@ export function SubmitPage() {
     previewReport !== null
       ? {
           monthlyHours: Math.round(calculateMonthlyHours(previewReport) * 10) / 10,
-          monthlyCost: Math.round(calculateMonthlyCost(previewReport, AVERAGE_HOURLY_COST)),
+          monthlyCost: Math.round(calculateMonthlyCost(previewReport, hourlyRate)),
           score: Math.round(calculateFrictionScore(previewReport)),
           narrative: buildImpactNarrative(previewReport),
         }
@@ -614,7 +614,7 @@ export function SubmitPage() {
                     </div>
                     <div style={{ textAlign: "right" }}>
                       <div style={{ fontSize: 13, fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>
-                        ${Math.round(calculateMonthlyCost(r, AVERAGE_HOURLY_COST)).toLocaleString()}/mo
+                        ${Math.round(calculateMonthlyCost(r, hourlyRate)).toLocaleString()}/mo
                       </div>
                       <div style={{ marginTop: 6 }}>
                         <StatusPill status={r.status} />

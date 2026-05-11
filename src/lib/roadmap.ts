@@ -1,4 +1,5 @@
 import type { FrictionCategory, Frequency, ReportStatus, RoadmapPriorityLevel } from "@/constants/friction";
+import { AVERAGE_HOURLY_COST } from "@/constants/friction";
 import {
   calculateMonthlyCost,
   calculateMonthlyHours,
@@ -155,7 +156,10 @@ export function formatRoadmapItemCopySummary(item: DerivedRoadmapItem): string {
 }
 
 /** Fuller export including taxonomy and related report lines. */
-export function formatRoadmapItemExportText(item: DerivedRoadmapItem): string {
+export function formatRoadmapItemExportText(
+  item: DerivedRoadmapItem,
+  hourlyRate: number = AVERAGE_HOURLY_COST,
+): string {
   const header = [
     `Problem: ${item.problemTitle}`,
     `Category: ${item.category}`,
@@ -174,19 +178,19 @@ export function formatRoadmapItemExportText(item: DerivedRoadmapItem): string {
     `Recommended first step: ${item.firstStep}`,
     "",
     "Related reports:",
-    ...item.relatedReports.map((r) => `  - ${formatRelatedReportLine(r)}`),
+    ...item.relatedReports.map((r) => `  - ${formatRelatedReportLine(r, hourlyRate)}`),
   ];
   return header.join("\n");
 }
 
-export function formatRelatedReportLine(r: FrictionReport): string {
-  return `${r.title} · ${r.team} · ${formatCurrency(Math.round(calculateMonthlyCost(r)))}/mo · ${formatFrequencyPlain(r.frequency)} · ${r.status}`;
+export function formatRelatedReportLine(r: FrictionReport, hourlyRate: number = AVERAGE_HOURLY_COST): string {
+  return `${r.title} · ${r.team} · ${formatCurrency(Math.round(calculateMonthlyCost(r, hourlyRate)))}/mo · ${formatFrequencyPlain(r.frequency)} · ${r.status}`;
 }
 
 /**
  * Groups reports by category + process and builds ranked roadmap rows.
  */
-export function generateRoadmapItems(reports: FrictionReport[]): DerivedRoadmapItem[] {
+export function generateRoadmapItems(reports: FrictionReport[], hourlyRate: number = AVERAGE_HOURLY_COST): DerivedRoadmapItem[] {
   const buckets = new Map<string, FrictionReport[]>();
   for (const r of reports) {
     const key = `${r.category}|||${r.process}`;
@@ -198,7 +202,7 @@ export function generateRoadmapItems(reports: FrictionReport[]): DerivedRoadmapI
   const raw = [...buckets.entries()].map(([key, relatedReports]) => {
     const [category, process] = key.split("|||") as [FrictionCategory, string];
     const monthlyHours = relatedReports.reduce((s, r) => s + calculateMonthlyHours(r), 0);
-    const monthlyCost = relatedReports.reduce((s, r) => s + calculateMonthlyCost(r), 0);
+    const monthlyCost = relatedReports.reduce((s, r) => s + calculateMonthlyCost(r, hourlyRate), 0);
     const annualCost = monthlyCost * 12;
     const avgSeverityMultiplier =
       relatedReports.reduce((s, r) => s + severityMultiplier(r.severity), 0) / relatedReports.length;

@@ -7,9 +7,9 @@ import {
   TeamCostBarChart,
 } from "@/components/charts/InsightsCharts";
 import { InsightsMetricCard } from "@/components/dashboard/InsightsMetricCard";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { CategoryPill, SeverityPill, StatusPill } from "@/components/ui/pills";
 import {
-  AVERAGE_HOURLY_COST,
   FRICTION_CATEGORIES,
   REPORT_STATUSES,
   SEVERITIES,
@@ -49,21 +49,22 @@ export function InsightsPage() {
   const clearFilters = useFrictionStore((s) => s.clearFilters);
   const setPage = useFrictionStore((s) => s.setPage);
   const setImpactReportModalOpen = useFrictionStore((s) => s.setImpactReportModalOpen);
+  const hourlyRate = useFrictionStore((s) => s.hourlyRate);
 
   const filtered = useMemo(() => filterReports(reports, filters), [reports, filters]);
   const hasAnyReports = reports.length > 0;
   const isFilteredEmpty = hasAnyReports && filtered.length === 0;
 
-  const metrics = useMemo(() => buildDashboardMetrics(filtered, AVERAGE_HOURLY_COST), [filtered]);
+  const metrics = useMemo(() => buildDashboardMetrics(filtered, hourlyRate), [filtered, hourlyRate]);
   const topCatCost = useMemo(
-    () => Math.round(metrics.topCategoryMonthlyHours * AVERAGE_HOURLY_COST),
-    [metrics.topCategoryMonthlyHours],
+    () => Math.round(metrics.topCategoryMonthlyHours * hourlyRate),
+    [metrics.topCategoryMonthlyHours, hourlyRate],
   );
   const highestProcess = useMemo(() => getHighestCostProcess(filtered), [filtered]);
   const openCount = useMemo(() => getOpenReportCount(filtered), [filtered]);
   const critHigh = useMemo(() => getCriticalHighCount(filtered), [filtered]);
   const avgScore = useMemo(() => getAverageFrictionScore(filtered), [filtered]);
-  const summaryText = useMemo(() => buildInsightsPlainSummary(filtered, AVERAGE_HOURLY_COST), [filtered]);
+  const summaryText = useMemo(() => buildInsightsPlainSummary(filtered, hourlyRate), [filtered, hourlyRate]);
 
   const categoryChartData = useMemo(
     () =>
@@ -78,13 +79,17 @@ export function InsightsPage() {
   );
 
   const teamCostData = useMemo(() => {
-    return getTeamMonthlyCosts(filtered, AVERAGE_HOURLY_COST)
+    return getTeamMonthlyCosts(filtered, hourlyRate)
       .filter((t) => t.monthlyCost > 0)
       .map((t) => ({ name: t.team, cost: t.monthlyCost }));
-  }, [filtered]);
+  }, [filtered, hourlyRate]);
 
   const severityData = useMemo(() => getSeverityCounts(filtered), [filtered]);
-  const processRank = useMemo(() => getProcessCostRanking(filtered, AVERAGE_HOURLY_COST).slice(0, 10), [filtered]);
+  const severityTotal = useMemo(() => severityData.reduce((s, d) => s + d.count, 0), [severityData]);
+  const processRank = useMemo(
+    () => getProcessCostRanking(filtered, hourlyRate).slice(0, 10),
+    [filtered, hourlyRate],
+  );
   const recent = useMemo(() => getRecentReports(filtered, 12), [filtered]);
 
   const filtersActive =
@@ -110,6 +115,9 @@ export function InsightsPage() {
             <button type="button" className="btn secondary" onClick={() => setImpactReportModalOpen(true)}>
               Generate impact report
             </button>
+            <button type="button" className="btn secondary" onClick={() => setPage("overview")}>
+              Demo toolbox on Overview
+            </button>
           </div>
         </div>
       </div>
@@ -134,6 +142,9 @@ export function InsightsPage() {
             </button>
             <button type="button" className="btn secondary" onClick={() => setImpactReportModalOpen(true)}>
               Generate impact report
+            </button>
+            <button type="button" className="btn secondary" onClick={() => setPage("overview")}>
+              Overview demo toolbox
             </button>
           </div>
         </div>
@@ -271,7 +282,7 @@ export function InsightsPage() {
         <InsightsMetricCard
           label="Monthly cost leakage"
           value={formatCurrency(metrics.monthlyCostLost)}
-          explanation={`Blended rate ${formatCurrency(AVERAGE_HOURLY_COST)}/hr.`}
+          explanation={`Blended rate ${formatCurrency(hourlyRate)}/hr (editable on Overview demo settings).`}
           impactLabel="Answers: What is this costing?"
           icon="$"
           tone="amber"
@@ -354,24 +365,60 @@ export function InsightsPage() {
       </motion.div>
 
       <div className="grid-2" style={{ marginBottom: 20 }}>
-        <CategoryHoursBarChart
-          data={categoryChartData}
-          title="Hours lost by category"
-          summary="Which friction types consume the most time each month (sorted high to low)."
-        />
-        <TeamCostBarChart
-          data={teamCostData}
-          title="Monthly cost by team"
-          summary="Which teams carry the largest estimated dollar drag at the blended hourly rate."
-        />
+        {categoryChartData.length === 0 ? (
+          <EmptyState
+            title="No category hours to chart"
+            description="Everything in this view nets to zero hours. Loosen filters or add reports that estimate monthly drag."
+          >
+            <button type="button" className="btn" onClick={() => clearFilters()}>
+              Clear filters
+            </button>
+            <button type="button" className="btn secondary" onClick={() => setPage("submit")}>
+              Report friction
+            </button>
+          </EmptyState>
+        ) : (
+          <CategoryHoursBarChart
+            data={categoryChartData}
+            title="Hours lost by category"
+            summary="Which friction types consume the most time each month (sorted high to low)."
+          />
+        )}
+        {teamCostData.length === 0 ? (
+          <EmptyState
+            title="No team dollar drag in this slice"
+            description="Costs roll up using your blended hourly rate and monthly hours estimates. Filters may be trimming every team signal."
+          >
+            <button type="button" className="btn" onClick={() => clearFilters()}>
+              Clear filters
+            </button>
+          </EmptyState>
+        ) : (
+          <TeamCostBarChart
+            data={teamCostData}
+            title="Monthly cost by team"
+            summary="Which teams carry the largest estimated dollar drag at the blended hourly rate."
+          />
+        )}
       </div>
 
       <div style={{ marginBottom: 20, maxWidth: 480, marginLeft: "auto", marginRight: "auto" }}>
-        <SeverityDistributionChart
-          data={severityData}
-          title="Severity distribution"
-          summary="How reports break down by disruption level — numbers repeated in the table for screen readers."
-        />
+        {severityTotal === 0 ? (
+          <EmptyState
+            title="No severity data to plot"
+            description="Severity counts rely on friction reports matching your filters. Try clearing filters or submit a scoped report."
+          >
+            <button type="button" className="btn" onClick={() => clearFilters()}>
+              Clear filters
+            </button>
+          </EmptyState>
+        ) : (
+          <SeverityDistributionChart
+            data={severityData}
+            title="Severity distribution"
+            summary="How reports break down by disruption level — numbers repeated in the table for screen readers."
+          />
+        )}
       </div>
 
       <div className="card" style={{ marginBottom: 20 }}>
@@ -444,6 +491,13 @@ export function InsightsPage() {
               </tr>
             </thead>
             <tbody>
+              {recent.length === 0 && (
+                <tr>
+                  <td colSpan={7} style={{ padding: "16px 0", color: "var(--ink-mute)", fontWeight: 500 }}>
+                    Nothing recent in this view — loosen filters or add a friction report from the Submit tab.
+                  </td>
+                </tr>
+              )}
               {recent.map((r) => (
                 <tr key={r.id}>
                   <td style={{ fontWeight: 500, maxWidth: 220 }}>{r.title}</td>
@@ -455,7 +509,7 @@ export function InsightsPage() {
                     <SeverityPill severity={r.severity} />
                   </td>
                   <td style={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}>
-                    {formatCurrency(Math.round(calculateMonthlyCost(r, AVERAGE_HOURLY_COST)))}
+                    {formatCurrency(Math.round(calculateMonthlyCost(r, hourlyRate)))}
                   </td>
                   <td>
                     <StatusPill status={r.status} />

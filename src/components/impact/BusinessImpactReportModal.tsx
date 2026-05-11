@@ -1,7 +1,6 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { AVERAGE_HOURLY_COST } from "@/constants/friction";
 import {
   generateBusinessImpactReport,
   type BusinessImpactReportTone,
@@ -58,6 +57,7 @@ export function BusinessImpactReportModal() {
   const open = useFrictionStore((s) => s.impactReportModalOpen);
   const setOpen = useFrictionStore((s) => s.setImpactReportModalOpen);
   const reports = useFrictionStore((s) => s.reports);
+  const hourlyRate = useFrictionStore((s) => s.hourlyRate);
 
   const [tone, setTone] = useState<BusinessImpactReportTone>("executive");
   const [generatedAt, setGeneratedAt] = useState(() => new Date());
@@ -98,10 +98,10 @@ export function BusinessImpactReportModal() {
     if (!reports.length) return null;
     return generateBusinessImpactReport(reports, {
       tone,
-      hourlyRate: AVERAGE_HOURLY_COST,
+      hourlyRate,
       generatedAt,
     });
-  }, [reports, tone, generatedAt]);
+  }, [reports, tone, hourlyRate, generatedAt]);
 
   const close = () => setOpen(false);
 

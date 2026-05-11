@@ -107,6 +107,7 @@ function sortRoadmapItems(items: DerivedRoadmapItem[], sortBy: RoadmapSort): Der
 
 export function RoadmapPage() {
   const reports = useFrictionStore((s) => s.reports);
+  const hourlyRate = useFrictionStore((s) => s.hourlyRate);
   const setPage = useFrictionStore((s) => s.setPage);
   const setClusterReportsStatus = useFrictionStore((s) => s.setClusterReportsStatus);
   const setImpactReportModalOpen = useFrictionStore((s) => s.setImpactReportModalOpen);
@@ -123,7 +124,7 @@ export function RoadmapPage() {
     window.setTimeout(() => setActionNote(null), 3200);
   }, []);
 
-  const allItems = useMemo(() => generateRoadmapItems(reports), [reports]);
+  const allItems = useMemo(() => generateRoadmapItems(reports, hourlyRate), [reports, hourlyRate]);
 
   const topByScore = allItems[0] ?? null;
 
@@ -655,7 +656,7 @@ export function RoadmapPage() {
                                           color: "var(--ink-soft)",
                                         }}
                                       >
-                                        {formatCurrency(Math.round(calculateMonthlyCost(r)))}
+                                        {formatCurrency(Math.round(calculateMonthlyCost(r, hourlyRate)))}
                                       </td>
                                       <td style={{ padding: "10px 0 10px 8px" }}>
                                         <StatusPill status={r.status} />
@@ -721,7 +722,7 @@ export function RoadmapPage() {
                               type="button"
                               className="btn secondary"
                               onClick={() => {
-                                downloadTextFile(`frictionmap-roadmap-${slugFilePart(item.problemTitle)}.txt`, formatRoadmapItemExportText(item));
+                                downloadTextFile(`frictionmap-roadmap-${slugFilePart(item.problemTitle)}.txt`, formatRoadmapItemExportText(item, hourlyRate));
                                 showNote("Exported roadmap item as text.");
                               }}
                             >
