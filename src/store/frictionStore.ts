@@ -2,14 +2,21 @@ import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 
 import {
-  AVERAGE_HOURLY_COST,
   FREQUENCIES,
   FRICTION_CATEGORIES,
   REPORT_STATUSES,
   SEVERITIES,
   TEAMS,
 } from "@/constants/friction";
-import { SEED_FRICTION_REPORTS } from "@/data/frictionReports";
+import { STORAGE_KEY_PRIMARY, PERSIST_STORE_VERSION } from "@/constants/persist";
+import { cloneScenarioReports } from "@/data/demoScenarios";
+import {
+  DEMO_SCENARIO_LABELS,
+  sanitizeHourlyRate,
+  sanitizeScenarioId,
+  type DemoScenarioId,
+} from "@/data/demoScenarioTypes";
+import { getDefaultReportsSnapshot } from "@/data/frictionReports";
 import { type FrictionFilters, buildDashboardMetrics, filterReports } from "@/lib/frictionCalculations";
 import { generateRoadmapItems } from "@/lib/roadmap";
 import type { FrictionReport } from "@/types";
@@ -30,7 +37,7 @@ export interface NewFrictionPayload {
   suggestion: string;
 }
 
-const STORAGE_KEY = "frictionmap-reports-v2";
+const LEGACY_STORAGE_KEY = "frictionmap-reports-v2";
 
 const defaultFilters: FrictionFilters = {
   selectedTeam: null,
@@ -45,6 +52,7 @@ const FREQ_SET = new Set<string>(FREQUENCIES);
 const SEV_SET = new Set<string>(SEVERITIES);
 const STAT_SET = new Set<string>(REPORT_STATUSES);
 
+/** Strict validation for newly submitted reports — unchanged semantics. */
 function isFrictionReportShape(r: unknown): r is FrictionReport {
   if (!r || typeof r !== "object") return false;
   const o = r as Record<string, unknown>;
@@ -69,6 +77,108 @@ function isFrictionReportShape(r: unknown): r is FrictionReport {
   );
 }
 
+const MAX_REPORT_HOURS = 120;
+
+function coerceOptionalString(o: Record<string, unknown>, key: string): string | undefined {
+  const v = o[key];
+  return typeof v === "string" ? v : undefined;
+}
+
+/** Best-effort repair for persisted payloads (missing labels, stray types). Returns null when unusable. */
+function coerceFrictionReport(raw: unknown, fallbackIndex: number): FrictionReport | null {
+  if (!raw || typeof raw !== "object") return null;
+  const o = raw as Record<string, unknown>;
+
+  let id = typeof o.id === "string" ? o.id.trim() : "";
+  if (!id) id = `recovered-${fallbackIndex}-${Date.now().toString(36)}`;
+
+  const titleRaw = typeof o.title === "string" ? o.title.trim() : "";
+  const description = typeof o.description === "string" ? o.description : "";
+  const process = typeof o.process === "string" ? o.process.trim() : "";
+  let suggestion = typeof o.suggestion === "string" ? o.suggestion : "";
+  let createdAt = typeof o.createdAt === "string" ? o.createdAt : new Date().toISOString();
+  try {
+    if (Number.isNaN(new Date(createdAt).getTime())) createdAt = new Date().toISOString();
+  } catch {
+    createdAt = new Date().toISOString();
+  }
+
+  let severity = typeof o.severity === "string" ? o.severity : "medium";
+  if (!SEV_SET.has(severity)) severity = "medium";
+
+  let frequency = typeof o.frequency === "string" ? o.frequency : "weekly";
+  if (!FREQ_SET.has(frequency)) frequency = "weekly";
+
+  let category = typeof o.category === "string" ? o.category : "Manual data entry";
+  if (!CAT_SET.has(category)) category = "Manual data entry";
+
+  let team = typeof o.team === "string" ? o.team : "Operations";
+  if (!TEAM_SET.has(team)) team = "Operations";
+
+  let status = typeof o.status === "string" ? o.status : "open";
+  if (!STAT_SET.has(status)) status = "open";
+
+  let timeLostHours = typeof o.timeLostHours === "number" ? o.timeLostHours : Number(o.timeLostHours);
+  if (!Number.isFinite(timeLostHours)) timeLostHours = 1;
+  timeLostHours = Math.min(MAX_REPORT_HOURS, Math.max(0.1, timeLostHours));
+
+  if (!titleRaw || !process) return null;
+
+  const report: FrictionReport = {
+    id,
+    title: titleRaw,
+    description: description.trim() ? description.trim() : "Description was unavailable in recovered data.",
+    category: category as FrictionReport["category"],
+    team: team as FrictionReport["team"],
+    process,
+    timeLostHours,
+    frequency: frequency as FrictionReport["frequency"],
+    severity: severity as FrictionReport["severity"],
+    suggestion: suggestion.trim() ? suggestion.trim() : "Review with team leads and tighten this entry.",
+    status: status as FrictionReport["status"],
+    createdAt,
+    whenLabel: coerceOptionalString(o, "whenLabel"),
+    whoLabel: coerceOptionalString(o, "whoLabel"),
+  };
+  return report;
+}
+
+interface SanitizedReportsOutcome {
+  reports: FrictionReport[];
+  degraded: boolean;
+}
+
+function sanitizeReportsArray(raw: unknown): SanitizedReportsOutcome {
+  if (Array.isArray(raw)) {
+    if (raw.length === 0) {
+      return { reports: [], degraded: false };
+    }
+
+    const strictOk = raw.filter(isFrictionReportShape);
+    if (strictOk.length === raw.length) {
+      return { reports: strictOk.map((r) => ({ ...r })), degraded: false };
+    }
+
+    const coerced: FrictionReport[] = [];
+    for (let i = 0; i < raw.length; i++) {
+      const r = coerceFrictionReport(raw[i], i);
+      if (r) coerced.push(r);
+    }
+
+    if (coerced.length === 0 && raw.length > 0) {
+      return { reports: getDefaultReportsSnapshot(), degraded: true };
+    }
+
+    if (coerced.length > 0) {
+      return { reports: coerced.map((r) => ({ ...r })), degraded: coerced.length !== raw.length };
+    }
+
+    return { reports: [], degraded: false };
+  }
+
+  return { reports: getDefaultReportsSnapshot(), degraded: true };
+}
+
 function newReportId(): string {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
     return `f-${crypto.randomUUID().replace(/-/g, "").slice(0, 10)}`;
@@ -76,30 +186,34 @@ function newReportId(): string {
   return `f-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
-function sanitizeReports(raw: unknown): FrictionReport[] {
-  if (!Array.isArray(raw)) return [...SEED_FRICTION_REPORTS];
-  if (raw.length === 0) return [];
-  const ok = raw.filter(isFrictionReportShape);
-  if (ok.length !== raw.length) return [...SEED_FRICTION_REPORTS];
-  return ok;
-}
-
 interface FrictionStoreState {
   reports: FrictionReport[];
   filters: FrictionFilters;
   page: AppPage;
   toast: ToastState;
-  /** Business Impact Report modal (not persisted). */
   impactReportModalOpen: boolean;
+
+  hourlyRate: number;
+  demoScenarioId: DemoScenarioId;
+  /** One-shot notice after hydrate when storage was repaired — UI may toast once. */
+  persistRecoverNotice: string | null;
+
+  /** Short-lived toast notifications (scenario load, resets, hydrate warnings). */
+  pulseToast: (msg: string) => void;
+  flushPersistRecoverIfAny: () => void;
 
   setPage: (page: AppPage) => void;
   setImpactReportModalOpen: (open: boolean) => void;
   setFilters: (partial: Partial<FrictionFilters>) => void;
   clearFilters: () => void;
+  /** Update blended hourly economics (usd) — clamps 1–500. */
+  setHourlyRate: (value: number) => void;
+  /** Swap demo datasets with confirmation assumed by caller. */
+  loadDemoScenario: (id: DemoScenarioId) => void;
+  clearPersistRecoverNotice: () => void;
 
   addReport: (payload: NewFrictionPayload) => FrictionReport;
   updateReport: (id: string, updates: Partial<FrictionReport>) => void;
-  /** Set all reports in a category+process cluster to the same status (roadmap progress). */
   setClusterReportsStatus: (
     category: FrictionReport["category"],
     process: string,
@@ -111,12 +225,29 @@ interface FrictionStoreState {
 
 export const useFrictionStore = create<FrictionStoreState>()(
   persist(
-    (set) => ({
-      reports: [...SEED_FRICTION_REPORTS],
+    (set, get) => ({
+      reports: cloneScenarioReports("operations"),
       filters: { ...defaultFilters },
       page: "overview",
       toast: null,
       impactReportModalOpen: false,
+      hourlyRate: sanitizeHourlyRate(undefined),
+      demoScenarioId: "operations",
+      persistRecoverNotice: null,
+
+      pulseToast: (msg) => {
+        set({ toast: { msg } });
+        window.setTimeout(() => {
+          set((state) => (state.toast?.msg === msg ? { toast: null } : {}));
+        }, 4400);
+      },
+
+      flushPersistRecoverIfAny: () => {
+        const n = get().persistRecoverNotice;
+        if (!n) return;
+        set({ persistRecoverNotice: null });
+        get().pulseToast(n);
+      },
 
       setPage: (page) => set({ page }),
 
@@ -128,6 +259,20 @@ export const useFrictionStore = create<FrictionStoreState>()(
         })),
 
       clearFilters: () => set({ filters: { ...defaultFilters } }),
+
+      clearPersistRecoverNotice: () => set({ persistRecoverNotice: null }),
+
+      setHourlyRate: (value) => set({ hourlyRate: sanitizeHourlyRate(value) }),
+
+      loadDemoScenario: (id) => {
+        const safe = sanitizeScenarioId(id);
+        set({
+          demoScenarioId: safe,
+          reports: cloneScenarioReports(safe),
+          filters: { ...defaultFilters },
+        });
+        get().pulseToast(`Loaded demo scenario: ${DEMO_SCENARIO_LABELS[safe]}.`);
+      },
 
       addReport: (payload) => {
         const id = newReportId();
@@ -163,31 +308,95 @@ export const useFrictionStore = create<FrictionStoreState>()(
           reports: s.reports.filter((r) => r.id !== id),
         })),
 
-      resetDemoData: () =>
+      resetDemoData: () => {
+        const id = get().demoScenarioId;
         set({
-          reports: SEED_FRICTION_REPORTS.map((r) => ({ ...r })),
+          reports: cloneScenarioReports(id),
           filters: { ...defaultFilters },
-        }),
+        });
+        get().pulseToast("Reports reset to the current demo scenario baseline.");
+      },
     }),
     {
-      name: STORAGE_KEY,
-      storage: createJSONStorage(() => localStorage),
-      partialize: (state) => ({ reports: state.reports }),
-      version: 1,
+      name: STORAGE_KEY_PRIMARY,
+      storage: createJSONStorage(() => ({
+        getItem: (name) => {
+          try {
+            let raw = window.localStorage.getItem(name);
+            if (raw === null && name === STORAGE_KEY_PRIMARY) {
+              const legacy = window.localStorage.getItem(LEGACY_STORAGE_KEY);
+              if (legacy !== null) {
+                raw = legacy;
+              }
+            }
+            return raw;
+          } catch {
+            return null;
+          }
+        },
+        setItem: (name, value) => {
+          try {
+            window.localStorage.setItem(name, value);
+          } catch {
+            /* quota / privacy mode */
+          }
+        },
+        removeItem: (name) => {
+          try {
+            window.localStorage.removeItem(name);
+          } catch {
+            /* ignore */
+          }
+        },
+      })),
+      version: PERSIST_STORE_VERSION,
+      partialize: (state) => ({
+        reports: state.reports,
+        hourlyRate: state.hourlyRate,
+        demoScenarioId: state.demoScenarioId,
+      }),
       merge: (persisted, current) => {
-        try {
-          const p = persisted as Partial<Pick<FrictionStoreState, "reports">> | undefined;
+        if (persisted === undefined || persisted === null) {
+          return { ...current };
+        }
+        if (typeof persisted !== "object" || Array.isArray(persisted)) {
           return {
             ...current,
-            reports: sanitizeReports(p?.reports),
-          };
-        } catch (e) {
-          console.warn("[FrictionMap] Persist merge failed, using seed data.", e);
-          return {
-            ...current,
-            reports: [...SEED_FRICTION_REPORTS],
+            reports: getDefaultReportsSnapshot(),
+            hourlyRate: sanitizeHourlyRate(undefined),
+            demoScenarioId: "operations",
+            persistRecoverNotice: "Saved settings were unreadable — restored the default Operations demo.",
           };
         }
+
+        const saved = persisted as Record<string, unknown>;
+        let recoverNotice: string | null = null;
+        const { reports, degraded } = sanitizeReportsArray(saved.reports);
+
+        if (degraded) {
+          recoverNotice =
+            "Some friction reports in storage were repaired or replaced — review the dataset or load a fresh demo scenario.";
+        }
+
+        const hourlyRate = sanitizeHourlyRate(saved.hourlyRate);
+        const demoScenarioId = sanitizeScenarioId(saved.demoScenarioId);
+
+        return {
+          ...current,
+          reports,
+          hourlyRate,
+          demoScenarioId,
+          persistRecoverNotice: recoverNotice,
+        };
+      },
+      migrate: (oldState: unknown, _fromVersion: number) => {
+        const p = typeof oldState === "object" && oldState !== null ? (oldState as Record<string, unknown>) : {};
+        const { reports } = sanitizeReportsArray(p.reports);
+        return {
+          reports,
+          hourlyRate: sanitizeHourlyRate(p.hourlyRate),
+          demoScenarioId: sanitizeScenarioId(p.demoScenarioId),
+        };
       },
     },
   ),
@@ -198,11 +407,14 @@ export function selectFilteredReports(state: FrictionStoreState): FrictionReport
 }
 
 export function selectDashboardMetrics(state: FrictionStoreState) {
-  return buildDashboardMetrics(selectFilteredReports(state), AVERAGE_HOURLY_COST);
+  return buildDashboardMetrics(selectFilteredReports(state), state.hourlyRate);
 }
 
 export function selectRoadmapItems(state: FrictionStoreState) {
-  return generateRoadmapItems(state.reports);
+  return generateRoadmapItems(state.reports, state.hourlyRate);
 }
 
-export { AVERAGE_HOURLY_COST };
+/** Effective hourly rate for dollar math (store override). */
+export function selectHourlyRate(state: FrictionStoreState): number {
+  return state.hourlyRate;
+}

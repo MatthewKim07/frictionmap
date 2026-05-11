@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 
 import { BusinessImpactReportModal } from "@/components/impact/BusinessImpactReportModal";
+import { PersistHydrationNotifier } from "@/components/layout/PersistHydrationNotifier";
 import { useFrictionStore } from "@/store/frictionStore";
 
 const TABS = [
@@ -78,6 +79,8 @@ export function AppShell({ children }: { children: ReactNode }) {
           {toast.msg}
         </div>
       )}
+
+      <PersistHydrationNotifier />
 
       <BusinessImpactReportModal />
     </div>
