@@ -109,6 +109,7 @@ export function RoadmapPage() {
   const reports = useFrictionStore((s) => s.reports);
   const setPage = useFrictionStore((s) => s.setPage);
   const setClusterReportsStatus = useFrictionStore((s) => s.setClusterReportsStatus);
+  const setImpactReportModalOpen = useFrictionStore((s) => s.setImpactReportModalOpen);
 
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [priorityFilter, setPriorityFilter] = useState<PriorityFilter>("all");
@@ -183,6 +184,9 @@ export function RoadmapPage() {
           <button type="button" className="btn coral" style={{ marginTop: 20 }} onClick={() => setPage("submit")}>
             Report friction
           </button>
+          <button type="button" className="btn secondary" style={{ marginTop: 12 }} onClick={() => setImpactReportModalOpen(true)}>
+            Generate impact report
+          </button>
         </div>
       </div>
     );
@@ -190,26 +194,40 @@ export function RoadmapPage() {
 
   return (
     <div className="fade-in">
-      <header style={{ marginBottom: 24 }}>
-        <h1 style={{ marginBottom: 6 }}>Fix Roadmap</h1>
-        <p className="subtitle" style={{ marginBottom: 12 }}>
-          A ranked action plan for reducing workflow drag.
-        </p>
-        {topRecLine && (
-          <p
-            style={{
-              margin: 0,
-              fontSize: 15,
-              fontWeight: 500,
-              color: "var(--ink-soft)",
-              maxWidth: 820,
-              lineHeight: 1.55,
-            }}
-          >
-            <span style={{ color: "var(--ink-mute)", fontWeight: 500 }}>Top recommendation: </span>
-            {topRecLine}
+      <header
+        style={{
+          marginBottom: 24,
+          display: "flex",
+          flexWrap: "wrap",
+          justifyContent: "space-between",
+          alignItems: "flex-start",
+          gap: 16,
+        }}
+      >
+        <div style={{ flex: "1 1 280px", minWidth: 0 }}>
+          <h1 style={{ marginBottom: 6 }}>Fix Roadmap</h1>
+          <p className="subtitle" style={{ marginBottom: 12 }}>
+            A ranked action plan for reducing workflow drag.
           </p>
-        )}
+          {topRecLine && (
+            <p
+              style={{
+                margin: 0,
+                fontSize: 15,
+                fontWeight: 500,
+                color: "var(--ink-soft)",
+                maxWidth: 820,
+                lineHeight: 1.55,
+              }}
+            >
+              <span style={{ color: "var(--ink-mute)", fontWeight: 500 }}>Top recommendation: </span>
+              {topRecLine}
+            </p>
+          )}
+        </div>
+        <button type="button" className="btn secondary" onClick={() => setImpactReportModalOpen(true)}>
+          Generate impact report
+        </button>
       </header>
 
       {whyFirst && topByScore && (

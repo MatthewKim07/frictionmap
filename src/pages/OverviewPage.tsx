@@ -28,6 +28,7 @@ function previewFix(text: string, max = 140): string {
 export function OverviewPage() {
   const reports = useFrictionStore((s) => s.reports);
   const setPage = useFrictionStore((s) => s.setPage);
+  const setImpactReportModalOpen = useFrictionStore((s) => s.setImpactReportModalOpen);
 
   const metrics = useMemo(() => buildDashboardMetrics(reports, AVERAGE_HOURLY_COST), [reports]);
   const openCount = useMemo(() => getOpenReportCount(reports), [reports]);
@@ -72,6 +73,9 @@ export function OverviewPage() {
           </button>
           <button type="button" className="btn secondary" onClick={() => setPage("roadmap")}>
             View roadmap
+          </button>
+          <button type="button" className="btn secondary" onClick={() => setImpactReportModalOpen(true)}>
+            Generate impact report
           </button>
           <button type="button" className="link" style={{ fontSize: 14, padding: "8px 4px" }} onClick={() => setPage("insights")}>
             Insights →

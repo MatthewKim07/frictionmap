@@ -48,6 +48,7 @@ export function InsightsPage() {
   const setFilters = useFrictionStore((s) => s.setFilters);
   const clearFilters = useFrictionStore((s) => s.clearFilters);
   const setPage = useFrictionStore((s) => s.setPage);
+  const setImpactReportModalOpen = useFrictionStore((s) => s.setImpactReportModalOpen);
 
   const filtered = useMemo(() => filterReports(reports, filters), [reports, filters]);
   const hasAnyReports = reports.length > 0;
@@ -102,9 +103,14 @@ export function InsightsPage() {
             Once teammates log slowdowns, you will see hours, cost, and where to focus first — no spreadsheets
             required.
           </p>
-          <button type="button" className="btn coral" onClick={() => setPage("submit")}>
-            Report friction
-          </button>
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            <button type="button" className="btn coral" onClick={() => setPage("submit")}>
+              Report friction
+            </button>
+            <button type="button" className="btn secondary" onClick={() => setImpactReportModalOpen(true)}>
+              Generate impact report
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -126,6 +132,9 @@ export function InsightsPage() {
             <button type="button" className="btn secondary" onClick={() => setPage("submit")}>
               Report friction
             </button>
+            <button type="button" className="btn secondary" onClick={() => setImpactReportModalOpen(true)}>
+              Generate impact report
+            </button>
           </div>
         </div>
       </div>
@@ -139,9 +148,14 @@ export function InsightsPage() {
           <h1>Insights</h1>
           <p className="subtitle">Where time and money leak — filtered from live reports.</p>
         </div>
-        <button type="button" className="btn secondary" onClick={() => setPage("roadmap")}>
-          See fix roadmap →
-        </button>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 10, justifyContent: "flex-end" }}>
+          <button type="button" className="btn secondary" onClick={() => setImpactReportModalOpen(true)}>
+            Generate impact report
+          </button>
+          <button type="button" className="btn secondary" onClick={() => setPage("roadmap")}>
+            See fix roadmap →
+          </button>
+        </div>
       </div>
 
       <div
