@@ -68,6 +68,13 @@ function isFrictionReportShape(r: unknown): r is FrictionReport {
   );
 }
 
+function newReportId(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return `f-${crypto.randomUUID().replace(/-/g, "").slice(0, 10)}`;
+  }
+  return `f-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`;
+}
+
 function sanitizeReports(raw: unknown): FrictionReport[] {
   if (!Array.isArray(raw)) return [...SEED_FRICTION_REPORTS];
   if (raw.length === 0) return [];
@@ -110,7 +117,7 @@ export const useFrictionStore = create<FrictionStoreState>()(
       clearFilters: () => set({ filters: { ...defaultFilters } }),
 
       addReport: (payload) => {
-        const id = `f${Math.floor(Math.random() * 9000) + 1000}`;
+        const id = newReportId();
         const report: FrictionReport = {
           ...payload,
           id,
@@ -122,10 +129,7 @@ export const useFrictionStore = create<FrictionStoreState>()(
 
         set((state) => ({
           reports: [report, ...state.reports],
-          toast: { msg: "Report submitted. It's on the list." },
         }));
-
-        window.setTimeout(() => set({ toast: null }), 3200);
         return report;
       },
 
