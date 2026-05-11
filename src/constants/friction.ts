@@ -1,6 +1,12 @@
 /** Canonical FrictionMap taxonomy and economics (single source of truth). */
 
-export const AVERAGE_HOURLY_COST = 50;
+export const DEFAULT_HOURLY_RATE = 50;
+
+/** Alias for calculators’ default hourly rate parameter (persisted rate overrides in UI/store). */
+export const AVERAGE_HOURLY_COST = DEFAULT_HOURLY_RATE;
+
+export const MIN_HOURLY_RATE = 1;
+export const MAX_HOURLY_RATE = 500;
 
 export const FRICTION_CATEGORIES = [
   "Access delay",
