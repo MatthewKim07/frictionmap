@@ -69,15 +69,14 @@ export function OverviewPage() {
           Find the hidden drag slowing your team down.
         </p>
         <p style={{ margin: "16px 0 0", maxWidth: 640, color: "var(--ink-soft)", lineHeight: 1.6, fontSize: 15 }}>
-          Employees report small workflow slowdowns. FrictionMap turns them into cost estimates, insights, and a
-          prioritized fix roadmap.
+          FrictionMap turns everyday workflow slowdowns into cost estimates, insights, and a prioritized fix roadmap.
         </p>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center", marginTop: 24 }}>
           <button type="button" className="btn coral" onClick={() => setPage("submit")}>
             Report friction
           </button>
           <button type="button" className="btn secondary" onClick={() => setPage("roadmap")}>
-            View roadmap
+            View fix roadmap
           </button>
           <button type="button" className="btn secondary" onClick={() => setImpactReportModalOpen(true)}>
             Generate impact report
@@ -90,6 +89,15 @@ export function OverviewPage() {
           Numbers below reflect all submitted friction reports.
         </p>
       </motion.section>
+
+      <section className="card" style={{ marginBottom: 24, padding: "14px 16px", background: "var(--paper-2)" }}>
+        <div style={{ fontSize: 12, fontWeight: 600, color: "var(--ink-mute)", letterSpacing: "0.03em", marginBottom: 6 }}>
+          Demo flow
+        </div>
+        <p style={{ margin: 0, fontSize: 14, color: "var(--ink-soft)", lineHeight: 1.55 }}>
+          Report a slowdown → see costs update → review the roadmap → export the impact report.
+        </p>
+      </section>
 
       <section aria-labelledby="overview-metrics-heading" style={{ marginBottom: 32 }}>
         <h2 id="overview-metrics-heading" className="visually-hidden">

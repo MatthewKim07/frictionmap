@@ -330,7 +330,7 @@ export function SubmitPage() {
 
   return (
     <div className="fade-in">
-      <h1>Report friction</h1>
+      <h1>Report Friction</h1>
       <p className="subtitle">
         Two minutes now saves your team hours later. Your name stays off this report — we aggregate by team and
         category.

@@ -22,7 +22,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const confirmReset = () => {
     if (
       window.confirm(
-        "Reset all friction reports to the built-in demo dataset? Your current reports will be replaced.",
+        "Reset all friction reports to the currently selected demo scenario baseline? Your current reports will be replaced.",
       )
     ) {
       resetDemoData();
@@ -60,7 +60,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
 
           <div className="header-end">
-            <button type="button" className="btn-reset-demo" onClick={confirmReset}>
+            <button type="button" className="btn-reset-demo" onClick={confirmReset} aria-label="Reset reports to scenario baseline">
               Reset demo
             </button>
             <span className="header-org">Acme Co.</span>
