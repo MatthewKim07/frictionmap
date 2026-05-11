@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 
+import { BusinessImpactReportModal } from "@/components/impact/BusinessImpactReportModal";
 import { useFrictionStore } from "@/store/frictionStore";
 
 const TABS = [
@@ -77,6 +78,8 @@ export function AppShell({ children }: { children: ReactNode }) {
           {toast.msg}
         </div>
       )}
+
+      <BusinessImpactReportModal />
     </div>
   );
 }

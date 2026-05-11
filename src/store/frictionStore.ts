@@ -89,8 +89,11 @@ interface FrictionStoreState {
   filters: FrictionFilters;
   page: AppPage;
   toast: ToastState;
+  /** Business Impact Report modal (not persisted). */
+  impactReportModalOpen: boolean;
 
   setPage: (page: AppPage) => void;
+  setImpactReportModalOpen: (open: boolean) => void;
   setFilters: (partial: Partial<FrictionFilters>) => void;
   clearFilters: () => void;
 
@@ -113,8 +116,11 @@ export const useFrictionStore = create<FrictionStoreState>()(
       filters: { ...defaultFilters },
       page: "overview",
       toast: null,
+      impactReportModalOpen: false,
 
       setPage: (page) => set({ page }),
+
+      setImpactReportModalOpen: (open) => set({ impactReportModalOpen: open }),
 
       setFilters: (partial) =>
         set((s) => ({
