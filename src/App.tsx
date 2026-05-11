@@ -3,7 +3,7 @@ import { InsightsPage } from "@/pages/InsightsPage";
 import { OverviewPage } from "@/pages/OverviewPage";
 import { RoadmapPage } from "@/pages/RoadmapPage";
 import { SubmitPage } from "@/pages/SubmitPage";
-import { useFrictionStore } from "@/store/useFrictionStore";
+import { useFrictionStore } from "@/store/frictionStore";
 
 export default function App() {
   const page = useFrictionStore((s) => s.page);

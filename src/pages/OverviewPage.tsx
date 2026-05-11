@@ -3,24 +3,25 @@ import { useMemo } from "react";
 import { BarRow } from "@/components/dashboard/BarRow";
 import { Metric } from "@/components/dashboard/Metric";
 import { CategoryPill, SeverityPill } from "@/components/ui/pills";
-import { BLENDED_HOURLY_USD } from "@/data/constants";
-import { buildDashboardMetrics, monthlyHoursLostForReport } from "@/lib/calculations";
-import { categoryColorHex, categoryMeta } from "@/lib/categoryMeta";
-import { useFrictionStore } from "@/store/useFrictionStore";
-import type { FrictionCategoryId } from "@/types";
+import { AVERAGE_HOURLY_COST } from "@/constants/friction";
+import { buildDashboardMetrics, calculateMonthlyHours, filterReports } from "@/lib/frictionCalculations";
+import { categoryColorHex } from "@/lib/categoryMeta";
+import { useFrictionStore } from "@/store/frictionStore";
+import type { FrictionCategory } from "@/types";
 
 export function OverviewPage() {
   const reports = useFrictionStore((s) => s.reports);
+  const filters = useFrictionStore((s) => s.filters);
   const setPage = useFrictionStore((s) => s.setPage);
 
-  const metrics = useMemo(() => buildDashboardMetrics(reports), [reports]);
+  const filtered = useMemo(() => filterReports(reports, filters), [reports, filters]);
+
+  const metrics = useMemo(() => buildDashboardMetrics(filtered, AVERAGE_HOURLY_COST), [filtered]);
 
   const top = useMemo(
     () =>
-      [...reports]
-        .sort((a, b) => monthlyHoursLostForReport(b) - monthlyHoursLostForReport(a))
-        .slice(0, 4),
-    [reports],
+      [...filtered].sort((a, b) => calculateMonthlyHours(b) - calculateMonthlyHours(a)).slice(0, 4),
+    [filtered],
   );
 
   const cats = Object.entries(metrics.byCategoryHours)
@@ -49,21 +50,21 @@ export function OverviewPage() {
         <Metric
           label="Hours lost this month"
           value={`${metrics.monthlyHoursLost.toLocaleString()}h`}
-          sub="across all teams"
+          sub="across all teams (filtered view)"
           icon="●"
           tone="coral"
         />
         <Metric
           label="Estimated cost"
           value={`$${(metrics.monthlyCostLost / 1000).toFixed(1)}k`}
-          sub={`at $${BLENDED_HOURLY_USD}/hr blended`}
+          sub={`$${AVERAGE_HOURLY_COST}/hr · annualized ~ $${(metrics.annualizedCostLost / 1000).toFixed(1)}k`}
           icon="$"
           tone="amber"
         />
         <Metric
           label="Open friction reports"
           value={metrics.reportCount}
-          sub="anonymous + aggregated"
+          sub={`Top category: ${metrics.topCategory} (${metrics.topCategoryMonthlyHours}h/mo)`}
           icon="◐"
           tone="lime"
         />
@@ -93,11 +94,11 @@ export function OverviewPage() {
                 <div>
                   <div style={{ fontWeight: 500, marginBottom: 4 }}>{r.title}</div>
                   <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
-                    <CategoryPill id={r.category} />
+                    <CategoryPill category={r.category} />
                     <span style={{ fontSize: 12, color: "var(--ink-mute)" }}>{r.team}</span>
                   </div>
                 </div>
-                <SeverityPill level={r.severity} />
+                <SeverityPill severity={r.severity} />
               </div>
             ))}
           </div>
@@ -109,13 +110,13 @@ export function OverviewPage() {
             <span style={{ fontSize: 12, color: "var(--ink-mute)" }}>Last 30 days</span>
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 14, marginTop: 6 }}>
-            {cats.map(([cid, h]) => (
+            {cats.map(([cat, h]) => (
               <BarRow
-                key={cid}
-                name={categoryMeta(cid as FrictionCategoryId).label}
+                key={cat}
+                name={cat}
                 value={Math.round(h)}
                 max={Math.round(max)}
-                color={categoryColorHex(cid as FrictionCategoryId)}
+                color={categoryColorHex(cat as FrictionCategory)}
               />
             ))}
           </div>

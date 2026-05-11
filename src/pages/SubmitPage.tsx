@@ -3,17 +3,27 @@ import { useState, type FormEvent } from "react";
 import { CategoryPill, SeverityPill } from "@/components/ui/pills";
 import { Pill } from "@/components/ui/Pill";
 import {
-  CATEGORY_DEFINITIONS,
-  BLENDED_HOURLY_USD,
-  FREQUENCY_OPTIONS,
+  AVERAGE_HOURLY_COST,
+  FREQUENCIES,
+  FRICTION_CATEGORIES,
   PROCESS_OPTIONS,
-  SEVERITY_LABELS,
-  SEVERITY_LEVELS,
+  SEVERITIES,
   TEAMS,
-} from "@/data/constants";
-import { monthlyHoursLostForReport } from "@/lib/calculations";
-import { useFrictionStore } from "@/store/useFrictionStore";
-import type { FrictionCategoryId, FrictionReport, Severity, Team } from "@/types";
+} from "@/constants/friction";
+import { calculateMonthlyCost, calculateMonthlyHours } from "@/lib/frictionCalculations";
+import { useFrictionStore } from "@/store/frictionStore";
+import type { FrictionCategory, FrictionReport, Frequency, Severity, Team } from "@/types";
+
+const SEVERITY_LABEL: Record<Severity, string> = {
+  low: "Low",
+  medium: "Medium",
+  high: "High",
+  critical: "Critical",
+};
+
+function formatFrequency(f: Frequency): string {
+  return f === "once" ? "Once" : f.charAt(0).toUpperCase() + f.slice(1);
+}
 
 export function SubmitPage() {
   const addReport = useFrictionStore((s) => s.addReport);
@@ -22,12 +32,12 @@ export function SubmitPage() {
   const [form, setForm] = useState({
     intent: "",
     blocker: "",
-    category: "data-entry" as FrictionCategoryId,
+    category: "Manual data entry" as FrictionCategory,
     team: "Finance" as Team,
     process: "NetSuite",
     timeLostHours: 2.0,
-    frequency: "Weekly" as (typeof FREQUENCY_OPTIONS)[number],
-    severity: 3 as Severity,
+    frequency: "weekly" as Frequency,
+    severity: "high" as Severity,
     suggestion: "",
   });
 
@@ -63,15 +73,15 @@ export function SubmitPage() {
 
         <div className="card" style={{ marginTop: 24, maxWidth: 640 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-            <CategoryPill id={submitted.category} />
+            <CategoryPill category={submitted.category} />
             <span style={{ fontSize: 12, color: "var(--ink-mute)" }}>ID · {submitted.id.toUpperCase()}</span>
           </div>
           <div style={{ fontSize: 17, fontWeight: 500, marginBottom: 12 }}>{submitted.title}</div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 14 }}>
             <Pill>{submitted.team}</Pill>
             <Pill>{submitted.process}</Pill>
-            <Pill>{submitted.frequency}</Pill>
-            <SeverityPill level={submitted.severity} />
+            <Pill>{formatFrequency(submitted.frequency)}</Pill>
+            <SeverityPill severity={submitted.severity} />
           </div>
           <div style={{ display: "flex", gap: 10, marginTop: 4 }}>
             <button type="button" className="btn" onClick={() => setPage("insights")}>
@@ -93,7 +103,7 @@ export function SubmitPage() {
     );
   }
 
-  const monthlyHours = Math.round(monthlyHoursLostForReport({
+  const previewReport: FrictionReport = {
     id: "preview",
     title: "",
     description: "",
@@ -106,8 +116,9 @@ export function SubmitPage() {
     suggestion: "",
     status: "open",
     createdAt: new Date().toISOString(),
-  }));
-  const monthlyCost = monthlyHours * BLENDED_HOURLY_USD;
+  };
+  const monthlyHours = Math.round(calculateMonthlyHours(previewReport));
+  const monthlyCost = calculateMonthlyCost(previewReport, AVERAGE_HOURLY_COST);
 
   return (
     <div className="fade-in">
@@ -163,11 +174,11 @@ export function SubmitPage() {
                 id="fm-category"
                 className="select"
                 value={form.category}
-                onChange={(e) => set("category", e.target.value as FrictionCategoryId)}
+                onChange={(e) => set("category", e.target.value as FrictionCategory)}
               >
-                {CATEGORY_DEFINITIONS.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.label}
+                {FRICTION_CATEGORIES.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
                   </option>
                 ))}
               </select>
@@ -190,9 +201,14 @@ export function SubmitPage() {
             <div className="field">
               <label id="fm-frequency-label">How often?</label>
               <div className="segmented" role="group" aria-labelledby="fm-frequency-label">
-                {FREQUENCY_OPTIONS.map((f) => (
-                  <button type="button" key={f} className={form.frequency === f ? "active" : ""} onClick={() => set("frequency", f)}>
-                    {f}
+                {FREQUENCIES.map((f) => (
+                  <button
+                    type="button"
+                    key={f}
+                    className={form.frequency === f ? "active" : ""}
+                    onClick={() => set("frequency", f)}
+                  >
+                    {formatFrequency(f)}
                   </button>
                 ))}
               </div>
@@ -224,15 +240,15 @@ export function SubmitPage() {
           <div className="field">
             <label>Severity</label>
             <div className="sev-group">
-              {SEVERITY_LEVELS.map((s) => (
+              {SEVERITIES.map((s) => (
                 <button
                   type="button"
                   key={s}
                   className={`sev-chip${form.severity === s ? " active" : ""}`}
                   onClick={() => set("severity", s)}
                 >
-                  <span className="sev-label">Level {s}</span>
-                  <span>{SEVERITY_LABELS[s]}</span>
+                  <span className="sev-label">{s}</span>
+                  <span>{SEVERITY_LABEL[s]}</span>
                 </button>
               ))}
             </div>
@@ -263,8 +279,8 @@ export function SubmitPage() {
           <div className="card">
             <div style={{ fontSize: 12, color: "var(--ink-mute)", marginBottom: 10 }}>Preview</div>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-              <CategoryPill id={form.category} />
-              <SeverityPill level={form.severity} />
+              <CategoryPill category={form.category} />
+              <SeverityPill severity={form.severity} />
             </div>
             <div style={{ fontSize: 16, fontWeight: 500, lineHeight: 1.35, marginBottom: 12, minHeight: 44 }}>
               {form.blocker || form.intent || "Your report title will appear here."}
@@ -272,7 +288,7 @@ export function SubmitPage() {
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 14 }}>
               <Pill>{form.team}</Pill>
               <Pill>{form.process}</Pill>
-              <Pill>{form.frequency}</Pill>
+              <Pill>{formatFrequency(form.frequency)}</Pill>
             </div>
             <div style={{ display: "flex", gap: 14, borderTop: "1px solid var(--rule)", paddingTop: 14 }}>
               <div style={{ flex: 1 }}>
@@ -281,7 +297,7 @@ export function SubmitPage() {
               </div>
               <div style={{ flex: 1 }}>
                 <div style={{ fontSize: 12, color: "var(--ink-mute)" }}>Est. monthly cost</div>
-                <div style={{ fontSize: 22, fontWeight: 600 }}>${monthlyCost.toLocaleString()}</div>
+                <div style={{ fontSize: 22, fontWeight: 600 }}>${Math.round(monthlyCost).toLocaleString()}</div>
               </div>
             </div>
           </div>

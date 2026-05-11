@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-import { useFrictionStore } from "@/store/useFrictionStore";
+import { useFrictionStore } from "@/store/frictionStore";
 
 const TABS = [
   { id: "overview" as const, label: "Overview" },

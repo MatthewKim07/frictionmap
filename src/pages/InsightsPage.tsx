@@ -2,18 +2,27 @@ import { useMemo } from "react";
 
 import { BarRow } from "@/components/dashboard/BarRow";
 import { CategoryPill, SeverityPill } from "@/components/ui/pills";
-import { buildDashboardMetrics, monthlyCostLostForReport, monthlyHoursLostForReport } from "@/lib/calculations";
-import { categoryColorHex, categoryMeta } from "@/lib/categoryMeta";
-import { useFrictionStore } from "@/store/useFrictionStore";
-import type { FrictionCategoryId } from "@/types";
+import {
+  buildDashboardMetrics,
+  calculateMonthlyCost,
+  calculateMonthlyHours,
+  filterReports,
+  getRecentReports,
+} from "@/lib/frictionCalculations";
+import { categoryColorHex } from "@/lib/categoryMeta";
+import { useFrictionStore } from "@/store/frictionStore";
+import type { FrictionCategory } from "@/types";
 
 const TEAM_BAR_COLORS = ["#E45A4C", "#E89B3C", "#B6C84A", "#6E7A4A", "#E45A4C", "#E89B3C", "#B6C84A", "#6E7A4A"];
 
 export function InsightsPage() {
   const reports = useFrictionStore((s) => s.reports);
+  const filters = useFrictionStore((s) => s.filters);
   const setPage = useFrictionStore((s) => s.setPage);
 
-  const metrics = useMemo(() => buildDashboardMetrics(reports), [reports]);
+  const filtered = useMemo(() => filterReports(reports, filters), [reports, filters]);
+
+  const metrics = useMemo(() => buildDashboardMetrics(filtered), [filtered]);
 
   const cats = Object.entries(metrics.byCategoryHours).sort((a, b) => b[1] - a[1]);
   const teams = Object.entries(metrics.byTeamHours).sort((a, b) => b[1] - a[1]);
@@ -22,17 +31,19 @@ export function InsightsPage() {
 
   const processes = useMemo(
     () =>
-      [...reports]
+      [...filtered]
         .map((r) => ({
           ...r,
-          monthly: monthlyHoursLostForReport(r),
-          cost: monthlyCostLostForReport(r),
+          monthly: calculateMonthlyHours(r),
+          cost: calculateMonthlyCost(r),
         }))
         .sort((a, b) => b.cost - a.cost)
         .slice(0, 5),
-    [reports],
+    [filtered],
   );
   const maxProcessCost = processes[0]?.cost ?? 1;
+
+  const recent = useMemo(() => getRecentReports(filtered, 8), [filtered]);
 
   return (
     <div className="fade-in">
@@ -53,13 +64,13 @@ export function InsightsPage() {
             <span style={{ fontSize: 12, color: "var(--ink-mute)" }}>{Math.round(maxCat)}h max</span>
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-            {cats.map(([cid, h]) => (
+            {cats.map(([cat, h]) => (
               <BarRow
-                key={cid}
-                name={categoryMeta(cid as FrictionCategoryId).label}
+                key={cat}
+                name={cat}
                 value={Math.round(h)}
                 max={Math.round(maxCat)}
-                color={categoryColorHex(cid as FrictionCategoryId)}
+                color={categoryColorHex(cat as FrictionCategory)}
               />
             ))}
           </div>
@@ -105,7 +116,7 @@ export function InsightsPage() {
                 </div>
                 <div style={{ textAlign: "right" }}>
                   <div style={{ fontWeight: 600, fontSize: 16, fontVariantNumeric: "tabular-nums" }}>
-                    ${p.cost.toLocaleString()}
+                    ${Math.round(p.cost).toLocaleString()}
                   </div>
                   <div style={{ fontSize: 12, color: "var(--ink-mute)" }}>{Math.round(p.monthly)}h/mo</div>
                 </div>
@@ -118,7 +129,7 @@ export function InsightsPage() {
       <div className="card">
         <div className="section-head">
           <h2>Recent reports</h2>
-          <span style={{ fontSize: 12, color: "var(--ink-mute)" }}>{reports.length} total</span>
+          <span style={{ fontSize: 12, color: "var(--ink-mute)" }}>{filtered.length} in view</span>
         </div>
         <table className="table">
           <thead>
@@ -132,15 +143,15 @@ export function InsightsPage() {
             </tr>
           </thead>
           <tbody>
-            {reports.slice(0, 8).map((r) => (
+            {recent.map((r) => (
               <tr key={r.id}>
                 <td style={{ fontWeight: 500 }}>{r.title}</td>
                 <td style={{ color: "var(--ink-soft)" }}>{r.team}</td>
                 <td>
-                  <CategoryPill id={r.category} />
+                  <CategoryPill category={r.category} />
                 </td>
                 <td>
-                  <SeverityPill level={r.severity} />
+                  <SeverityPill severity={r.severity} />
                 </td>
                 <td style={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{r.timeLostHours}h</td>
                 <td style={{ textAlign: "right", color: "var(--ink-mute)", fontSize: 13 }}>

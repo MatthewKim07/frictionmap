@@ -1,4 +1,15 @@
-import { CATEGORY_DEFINITIONS, type FrictionCategoryId } from "@/data/constants";
+import type { FrictionCategory } from "@/constants/friction";
+
+const CATEGORY_TONE: Record<FrictionCategory, "coral" | "amber" | "lime"> = {
+  "Access delay": "coral",
+  "Approval bottleneck": "amber",
+  "Manual data entry": "amber",
+  "Tool confusion": "lime",
+  "Missing documentation": "lime",
+  "Duplicate work": "coral",
+  "Waiting on another team": "amber",
+  "Rework or error correction": "coral",
+};
 
 const CATEGORY_COLORS: Record<string, string> = {
   coral: "#E45A4C",
@@ -7,11 +18,12 @@ const CATEGORY_COLORS: Record<string, string> = {
   sage: "#6E7A4A",
 };
 
-export function categoryMeta(id: FrictionCategoryId) {
-  return CATEGORY_DEFINITIONS.find((c) => c.id === id) ?? CATEGORY_DEFINITIONS[0];
+export function categoryMeta(category: FrictionCategory) {
+  const tone = CATEGORY_TONE[category] ?? "lime";
+  return { label: category, tone };
 }
 
-export function categoryColorHex(id: FrictionCategoryId): string {
-  const meta = categoryMeta(id);
-  return CATEGORY_COLORS[meta.color] ?? CATEGORY_COLORS.sage;
+export function categoryColorHex(category: FrictionCategory): string {
+  const { tone } = categoryMeta(category);
+  return CATEGORY_COLORS[tone] ?? CATEGORY_COLORS.lime;
 }

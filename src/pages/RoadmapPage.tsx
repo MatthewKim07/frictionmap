@@ -1,31 +1,23 @@
 import { useMemo } from "react";
 
-import { CategoryPill, PriorityPill } from "@/components/ui/pills";
+import { CategoryPill, RoadmapPriorityPill } from "@/components/ui/pills";
 import { Pill } from "@/components/ui/Pill";
-import { BLENDED_HOURLY_USD } from "@/data/constants";
-import { MOCK_ROADMAP_ITEMS } from "@/data/fixRoadmap";
-import { buildDashboardMetrics } from "@/lib/calculations";
-import { useFrictionStore } from "@/store/useFrictionStore";
+import { AVERAGE_HOURLY_COST } from "@/constants/friction";
+import { filterReports } from "@/lib/frictionCalculations";
+import { generateRoadmapItems } from "@/lib/roadmap";
+import { useFrictionStore } from "@/store/frictionStore";
 
 export function RoadmapPage() {
   const reports = useFrictionStore((s) => s.reports);
+  const filters = useFrictionStore((s) => s.filters);
 
-  const metrics = useMemo(() => buildDashboardMetrics(reports), [reports]);
+  const filtered = useMemo(() => filterReports(reports, filters), [reports, filters]);
+  const ranked = useMemo(() => generateRoadmapItems(filtered), [filtered]);
 
-  const ranked = useMemo(
-    () =>
-      [...MOCK_ROADMAP_ITEMS]
-        .map((item) => {
-          const dragHours = Math.round(metrics.byCategoryHours[item.categoryTag] ?? 0);
-          const score = item.estimatedMonthlyHoursSaved + Math.round(dragHours / 3);
-          const monthlyCost = item.estimatedMonthlyHoursSaved * BLENDED_HOURLY_USD;
-          return { ...item, dragHours, score, monthlyCost };
-        })
-        .sort((a, b) => b.score - a.score),
-    [metrics],
+  const totalRecoverAnnual = useMemo(
+    () => ranked.slice(0, 3).reduce((s, row) => s + row.monthlyHours * AVERAGE_HOURLY_COST * 12, 0),
+    [ranked],
   );
-
-  const totalRecover = ranked.slice(0, 3).reduce((s, row) => s + row.estimatedMonthlyHoursSaved, 0);
 
   return (
     <div className="fade-in">
@@ -35,11 +27,15 @@ export function RoadmapPage() {
           <p className="subtitle">Ranked by how much time and money they’d return.</p>
         </div>
         <div style={{ textAlign: "right" }}>
-          <div style={{ fontSize: 12, color: "var(--ink-mute)" }}>If we ship the top 3</div>
+          <div style={{ fontSize: 12, color: "var(--ink-mute)" }}>If we ship the top 3 clusters</div>
           <div style={{ fontSize: 22, fontWeight: 600, color: "var(--sage)" }}>
-            ~${((totalRecover * BLENDED_HOURLY_USD * 12) / 1000).toFixed(0)}k / yr recovered
+            ~${(totalRecoverAnnual / 1000).toFixed(0)}k / yr addressable
           </div>
         </div>
+      </div>
+
+      <div style={{ fontSize: 12, color: "var(--ink-mute)", marginBottom: 16 }}>
+        Derived from {filtered.length} report{filtered.length === 1 ? "" : "s"} in the current filter.
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
@@ -74,21 +70,20 @@ export function RoadmapPage() {
 
             <div>
               <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: 8 }}>
-                <CategoryPill id={f.categoryTag} />
-                <PriorityPill priority={f.priority} />
-                <Pill>Effort · {f.effort}</Pill>
-                <span style={{ fontSize: 12, color: "var(--ink-mute)" }}>{f.team}</span>
+                <CategoryPill category={f.category} />
+                <RoadmapPriorityPill level={f.priorityLevel} />
+                <Pill>{f.relatedReports.length} related reports</Pill>
               </div>
-              <h3 style={{ fontSize: 17, marginBottom: 8 }}>{f.title}</h3>
+              <h3 style={{ fontSize: 17, marginBottom: 8 }}>{f.process}</h3>
 
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginTop: 10 }}>
                 <div>
                   <div style={{ fontSize: 12, color: "var(--ink-mute)", marginBottom: 3 }}>Why it matters</div>
-                  <div style={{ fontSize: 14, color: "var(--ink-soft)", lineHeight: 1.5 }}>{f.problem}</div>
+                  <div style={{ fontSize: 14, color: "var(--ink-soft)", lineHeight: 1.5 }}>{f.whyItMatters}</div>
                 </div>
                 <div>
                   <div style={{ fontSize: 12, color: "var(--ink-mute)", marginBottom: 3 }}>Suggested fix</div>
-                  <div style={{ fontSize: 14, color: "var(--ink-soft)", lineHeight: 1.5 }}>{f.suggestion}</div>
+                  <div style={{ fontSize: 14, color: "var(--ink-soft)", lineHeight: 1.5 }}>{f.suggestedFix}</div>
                 </div>
               </div>
             </div>
@@ -96,10 +91,10 @@ export function RoadmapPage() {
             <div style={{ textAlign: "right", minWidth: 130 }}>
               <div style={{ fontSize: 12, color: "var(--ink-mute)" }}>Est. monthly cost</div>
               <div style={{ fontSize: 24, fontWeight: 600, color: "var(--coral)", fontVariantNumeric: "tabular-nums" }}>
-                ${f.monthlyCost.toLocaleString()}
+                ${Math.round(f.monthlyCost).toLocaleString()}
               </div>
               <div style={{ fontSize: 12, color: "var(--ink-mute)", marginTop: 2 }}>
-                {f.estimatedMonthlyHoursSaved}h/mo back
+                {Math.round(f.monthlyHours)}h/mo lost
               </div>
             </div>
           </div>
