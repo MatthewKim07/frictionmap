@@ -32,7 +32,11 @@ export const TEAMS = [
   "Product",
 ] as const;
 
-export type Team = (typeof TEAMS)[number];
+/** Builtin demo org teams (seed data). Reports may use custom team labels from Settings. */
+export type BuiltinTeam = (typeof TEAMS)[number];
+
+/** Team label on a report — builtins or user-defined from Company Settings. */
+export type Team = string;
 
 export const FREQUENCIES = ["once", "monthly", "weekly", "daily"] as const;
 export type Frequency = (typeof FREQUENCIES)[number];
