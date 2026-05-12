@@ -2,11 +2,19 @@ import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 
 import {
+  DEFAULT_COMPANY_NAME,
+  defaultCompanySettings,
+  getEffectiveTeamOptions,
+  mergeCompanySettings,
+  sanitizeSimulationRole,
+  type CompanySettingsSlice,
+  type SimulationRole,
+} from "@/constants/companySettings";
+import {
   FREQUENCIES,
   FRICTION_CATEGORIES,
   REPORT_STATUSES,
   SEVERITIES,
-  TEAMS,
 } from "@/constants/friction";
 import {
   defaultIntegrationSettings,
@@ -34,7 +42,7 @@ import { generateRoadmapItems } from "@/lib/roadmap";
 import type { DataConnectionMode } from "@/lib/supabase";
 import type { FrictionReport } from "@/types";
 
-export type AppPage = "overview" | "submit" | "insights" | "roadmap" | "integrations";
+export type AppPage = "overview" | "submit" | "insights" | "roadmap" | "integrations" | "settings";
 
 export type ToastState = { msg: string } | null;
 
@@ -60,7 +68,6 @@ const defaultFilters: FrictionFilters = {
 };
 
 const CAT_SET = new Set<string>(FRICTION_CATEGORIES);
-const TEAM_SET = new Set<string>(TEAMS);
 const FREQ_SET = new Set<string>(FREQUENCIES);
 const SEV_SET = new Set<string>(SEVERITIES);
 const STAT_SET = new Set<string>(REPORT_STATUSES);
@@ -84,7 +91,8 @@ function isFrictionReportShape(r: unknown): r is FrictionReport {
     typeof o.category === "string" &&
     CAT_SET.has(o.category) &&
     typeof o.team === "string" &&
-    TEAM_SET.has(o.team) &&
+    o.team.trim().length > 0 &&
+    o.team.length <= 120 &&
     typeof o.status === "string" &&
     STAT_SET.has(o.status)
   );
@@ -125,8 +133,9 @@ function coerceFrictionReport(raw: unknown, fallbackIndex: number): FrictionRepo
   let category = typeof o.category === "string" ? o.category : "Manual data entry";
   if (!CAT_SET.has(category)) category = "Manual data entry";
 
-  let team = typeof o.team === "string" ? o.team : "Operations";
-  if (!TEAM_SET.has(team)) team = "Operations";
+  let team = typeof o.team === "string" ? o.team.trim() : "Operations";
+  if (!team) team = "Operations";
+  if (team.length > 120) team = team.slice(0, 120);
 
   let status = typeof o.status === "string" ? o.status : "open";
   if (!STAT_SET.has(status)) status = "open";
@@ -242,6 +251,14 @@ interface FrictionStoreState {
   deleteReport: (id: string) => void;
   resetDemoData: () => void;
 
+  /** Company / org preferences (local persistence only). */
+  companySettings: CompanySettingsSlice;
+
+  setCompanySettings: (partial: Partial<CompanySettingsSlice>) => void;
+  setSimulationRole: (role: SimulationRole) => void;
+  /** Wipes browser persistence and resets app state to demo defaults (does not delete Supabase rows). */
+  clearAllLocalData: () => void;
+
   setIntegrationSettings: (partial: Partial<IntegrationSettings>) => void;
   /** Bulk-add reports (e.g. CSV import). Syncs replace to repository. */
   importReports: (incoming: FrictionReport[]) => void;
@@ -262,6 +279,63 @@ export const useFrictionStore = create<FrictionStoreState>()(
       demoScenarioId: "operations",
       persistRecoverNotice: null,
       integrationSettings: defaultIntegrationSettings(),
+      companySettings: defaultCompanySettings(),
+
+      setCompanySettings: (partial) =>
+        set((s) => {
+          const merged = { ...s.companySettings, ...partial };
+          const next = mergeCompanySettings(merged);
+          const opts = getEffectiveTeamOptions(next);
+          const defaultTeam = opts.includes(next.defaultTeam) ? next.defaultTeam : opts[0]!;
+          return { companySettings: { ...next, defaultTeam } };
+        }),
+
+      setSimulationRole: (role) =>
+        set((s) => ({
+          companySettings: { ...s.companySettings, simulationRole: sanitizeSimulationRole(role) },
+        })),
+
+      clearAllLocalData: () => {
+        try {
+          window.localStorage.removeItem(STORAGE_KEY_PRIMARY);
+          window.localStorage.removeItem(LEGACY_STORAGE_KEY);
+        } catch {
+          /* ignore */
+        }
+        try {
+          useFrictionStore.persist.clearStorage();
+        } catch {
+          /* older persist API */
+        }
+        const wasSupabase = get().dataConnectionMode === "supabase-connected";
+        const fresh = cloneScenarioReports("operations");
+        set({
+          reports: fresh,
+          filters: { ...defaultFilters },
+          page: "overview",
+          toast: null,
+          impactReportModalOpen: false,
+          isLoadingReports: false,
+          reportError: null,
+          dataConnectionMode: wasSupabase ? "supabase-connected" : "local-demo",
+          hourlyRate: sanitizeHourlyRate(undefined),
+          demoScenarioId: "operations",
+          persistRecoverNotice: null,
+          integrationSettings: defaultIntegrationSettings(),
+          companySettings: defaultCompanySettings(),
+        });
+        if (!wasSupabase) {
+          void repoReplaceReports(fresh).then((res) => {
+            set({ dataConnectionMode: res.mode, reportError: res.warning ?? null });
+            if (res.warning) get().pulseToast(res.warning);
+          });
+        }
+        get().pulseToast(
+          wasSupabase
+            ? "Local browser data cleared and reset to the default Operations demo in this tab only. Supabase rows were not modified — refresh to reload from your project."
+            : "Local app data cleared and reset to the default Operations demo baseline.",
+        );
+      },
 
       pulseToast: (msg) => {
         set({ toast: { msg } });
@@ -463,6 +537,7 @@ export const useFrictionStore = create<FrictionStoreState>()(
         hourlyRate: state.hourlyRate,
         demoScenarioId: state.demoScenarioId,
         integrationSettings: state.integrationSettings,
+        companySettings: state.companySettings,
       }),
       merge: (persisted, current) => {
         if (persisted === undefined || persisted === null) {
@@ -475,6 +550,7 @@ export const useFrictionStore = create<FrictionStoreState>()(
             hourlyRate: sanitizeHourlyRate(undefined),
             demoScenarioId: "operations",
             integrationSettings: defaultIntegrationSettings(),
+            companySettings: defaultCompanySettings(),
             persistRecoverNotice: "Saved settings were unreadable — restored the default Operations demo.",
           };
         }
@@ -491,6 +567,7 @@ export const useFrictionStore = create<FrictionStoreState>()(
         const hourlyRate = sanitizeHourlyRate(saved.hourlyRate);
         const demoScenarioId = sanitizeScenarioId(saved.demoScenarioId);
         const integrationSettings = sanitizeIntegrationSettings(saved.integrationSettings);
+        const companySettings = mergeCompanySettings(saved.companySettings);
 
         return {
           ...current,
@@ -498,6 +575,7 @@ export const useFrictionStore = create<FrictionStoreState>()(
           hourlyRate,
           demoScenarioId,
           integrationSettings,
+          companySettings,
           persistRecoverNotice: recoverNotice,
         };
       },
@@ -510,6 +588,7 @@ export const useFrictionStore = create<FrictionStoreState>()(
           demoScenarioId: sanitizeScenarioId(p.demoScenarioId),
           integrationSettings:
             fromVersion >= 3 ? sanitizeIntegrationSettings(p.integrationSettings) : defaultIntegrationSettings(),
+          companySettings: fromVersion >= 5 ? mergeCompanySettings(p.companySettings) : defaultCompanySettings(),
         };
       },
     },
@@ -525,7 +604,10 @@ export function selectDashboardMetrics(state: FrictionStoreState) {
 }
 
 export function selectRoadmapItems(state: FrictionStoreState) {
-  return generateRoadmapItems(state.reports, state.hourlyRate);
+  const { companyName, currencyCode } = state.companySettings;
+  const recommendationSettings =
+    companyName.trim() && companyName !== DEFAULT_COMPANY_NAME ? { organizationLabel: companyName.trim() } : undefined;
+  return generateRoadmapItems(state.reports, state.hourlyRate, currencyCode, recommendationSettings);
 }
 
 /** Effective hourly rate for dollar math (store override). */

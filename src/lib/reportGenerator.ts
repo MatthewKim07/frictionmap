@@ -1,3 +1,5 @@
+import type { AppCurrencyCode } from "@/constants/currency";
+import { DEFAULT_APP_CURRENCY } from "@/constants/currency";
 import { AVERAGE_HOURLY_COST } from "@/constants/friction";
 import {
   buildDashboardMetrics,
@@ -19,6 +21,8 @@ export interface BusinessImpactReportOptions {
   tone?: BusinessImpactReportTone;
   hourlyRate?: number;
   generatedAt?: Date;
+  /** Display currency for dollar strings (no FX conversion). */
+  currencyCode?: AppCurrencyCode;
 }
 
 export interface BusinessImpactReportStats {
@@ -51,11 +55,12 @@ export function generateExecutiveSummary(
   roadmapTop: DerivedRoadmapItem | undefined,
   highestProcess: { process: string; monthlyCost: number },
   tone: BusinessImpactReportTone,
+  currency: AppCurrencyCode = DEFAULT_APP_CURRENCY,
 ): string {
   const n = metrics.reportCount;
   const hoursPhrase = formatHours(metrics.monthlyHoursLost);
-  const monthly$ = formatCurrency(metrics.monthlyCostLost);
-  const annual$ = formatCurrency(metrics.annualizedCostLost);
+  const monthly$ = formatCurrency(metrics.monthlyCostLost, currency);
+  const annual$ = formatCurrency(metrics.annualizedCostLost, currency);
   const topCat = metrics.topCategory ?? "multiple categories";
   const proc =
     highestProcess.process && highestProcess.monthlyCost > 0
@@ -75,12 +80,12 @@ export function generateExecutiveSummary(
   return `${lead}\n\n${catProc}\n\nOperational follow-through — clear owners, queues, and runbooks — is what turns these estimates into sustained time back for teams.`;
 }
 
-export function generateTopBottlenecksSection(roadmapItems: DerivedRoadmapItem[]): string {
+export function generateTopBottlenecksSection(roadmapItems: DerivedRoadmapItem[], currency: AppCurrencyCode = DEFAULT_APP_CURRENCY): string {
   const top = roadmapItems.slice(0, 3);
   if (!top.length) return "## Top Bottlenecks\n\n_No clustered bottlenecks yet._\n";
   const lines = top.map(
     (item, i) =>
-      `${i + 1}. **${item.process}** — ${formatCurrency(Math.round(item.monthlyCost))}/month (${item.priorityLevel} priority, ${item.relatedReports.length} related ${item.relatedReports.length === 1 ? "report" : "reports"})`,
+      `${i + 1}. **${item.process}** — ${formatCurrency(Math.round(item.monthlyCost), currency)}/month (${item.priorityLevel} priority, ${item.relatedReports.length} related ${item.relatedReports.length === 1 ? "report" : "reports"})`,
   );
   return `## Top Bottlenecks\n\n${lines.join("\n")}\n`;
 }
@@ -106,10 +111,11 @@ export function generateRecommendedFixesSection(roadmapItems: DerivedRoadmapItem
 export function generateNextStepsSection(
   roadmapItems: DerivedRoadmapItem[],
   tone: BusinessImpactReportTone,
+  currency: AppCurrencyCode = DEFAULT_APP_CURRENCY,
 ): string {
   const first = roadmapItems[0];
   const start = first
-    ? `Start with **${first.process}** (${formatCurrency(Math.round(first.monthlyCost))}/month) when aligning owners.`
+    ? `Start with **${first.process}** (${formatCurrency(Math.round(first.monthlyCost), currency)}/month) when aligning owners.`
     : "Start with the highest monthly-cost cluster when assigning owners.";
 
   if (tone === "executive") {
@@ -126,39 +132,40 @@ function generateKeyMetricsSection(
   openCount: number,
   critHigh: number,
   highestProcess: { process: string; monthlyCost: number },
+  currency: AppCurrencyCode = DEFAULT_APP_CURRENCY,
 ): string {
   const topCat = metrics.topCategory ?? "—";
   const procLine =
     highestProcess.process && highestProcess.monthlyCost > 0
-      ? `- Highest-cost process: **${highestProcess.process}** (${formatCurrency(Math.round(highestProcess.monthlyCost))}/month)\n`
+      ? `- Highest-cost process: **${highestProcess.process}** (${formatCurrency(Math.round(highestProcess.monthlyCost), currency)}/month)\n`
       : "- Highest-cost process: **—** (insufficient data)\n";
-  return `## Key Metrics\n\n- Monthly hours lost: **${formatHours(metrics.monthlyHoursLost)}**\n- Monthly cost leakage: **${formatCurrency(metrics.monthlyCostLost)}**\n- Annualized cost leakage: **${formatCurrency(metrics.annualizedCostLost)}**\n- Reports analyzed: **${metrics.reportCount}**\n- Open reports: **${openCount}**\n- Top friction category: **${topCat}**\n${procLine}- Critical/high severity reports: **${critHigh}**\n`;
+  return `## Key Metrics\n\n- Monthly hours lost: **${formatHours(metrics.monthlyHoursLost)}**\n- Monthly cost leakage: **${formatCurrency(metrics.monthlyCostLost, currency)}**\n- Annualized cost leakage: **${formatCurrency(metrics.annualizedCostLost, currency)}**\n- Reports analyzed: **${metrics.reportCount}**\n- Open reports: **${openCount}**\n- Top friction category: **${topCat}**\n${procLine}- Critical/high severity reports: **${critHigh}**\n`;
 }
 
-function generateTopCategoriesSection(reports: FrictionReport[], hourlyRate: number): string {
+function generateTopCategoriesSection(reports: FrictionReport[], hourlyRate: number, currency: AppCurrencyCode = DEFAULT_APP_CURRENCY): string {
   const rows = getCategoryImpactRows(reports, hourlyRate).slice(0, 5);
   if (!rows.length) return "## Top Friction Categories\n\n_No category data._\n";
   const lines = rows.map(
     (r, i) =>
-      `${i + 1}. **${r.category}** — ${formatHours(r.monthlyHours)} · ${formatCurrency(r.monthlyCost)}/month`,
+      `${i + 1}. **${r.category}** — ${formatHours(r.monthlyHours)} · ${formatCurrency(r.monthlyCost, currency)}/month`,
   );
   return `## Top Friction Categories\n\n${lines.join("\n")}\n`;
 }
 
-function generateTeamsProcessesSection(reports: FrictionReport[], hourlyRate: number): string {
+function generateTeamsProcessesSection(reports: FrictionReport[], hourlyRate: number, currency: AppCurrencyCode = DEFAULT_APP_CURRENCY): string {
   const processes = getProcessCostRanking(reports, hourlyRate).slice(0, 5);
   const teams = getTeamMonthlyCosts(reports, hourlyRate).filter((t) => t.monthlyCost > 0).slice(0, 5);
   const procLines = processes.length
-    ? processes.map((p) => `- **${p.process}** — ${formatCurrency(p.monthlyCost)}/month (${p.reportCount} reports)`).join("\n")
+    ? processes.map((p) => `- **${p.process}** — ${formatCurrency(p.monthlyCost, currency)}/month (${p.reportCount} reports)`).join("\n")
     : "_No process rollup._";
   const teamLines = teams.length
-    ? teams.map((t) => `- **${t.team}** — ${formatCurrency(t.monthlyCost)}/month`).join("\n")
+    ? teams.map((t) => `- **${t.team}** — ${formatCurrency(t.monthlyCost, currency)}/month`).join("\n")
     : "_No team rollup._";
   return `## Highest-Cost Processes and Teams\n\n### Processes\n\n${procLines}\n\n### Teams\n\n${teamLines}\n`;
 }
 
-function generateSavingsSection(metrics: DashboardMetrics): string {
-  return `## Estimated Savings Opportunity\n\nIf the modeled drag were fully addressed, teams could recover up to **${formatCurrency(metrics.monthlyCostLost)}** per month, or about **${formatCurrency(metrics.annualizedCostLost)}** annualized, based on current reports and the configured hourly rate.\n`;
+function generateSavingsSection(metrics: DashboardMetrics, currency: AppCurrencyCode = DEFAULT_APP_CURRENCY): string {
+  return `## Estimated Savings Opportunity\n\nIf the modeled drag were fully addressed, teams could recover up to **${formatCurrency(metrics.monthlyCostLost, currency)}** per month, or about **${formatCurrency(metrics.annualizedCostLost, currency)}** annualized, based on current reports and the configured hourly rate.\n`;
 }
 
 /**
@@ -174,12 +181,13 @@ export function generateBusinessImpactReport(
   const hourlyRate = options.hourlyRate ?? AVERAGE_HOURLY_COST;
   const tone = options.tone ?? "executive";
   const generatedAt = options.generatedAt ?? new Date();
+  const currency = options.currencyCode ?? DEFAULT_APP_CURRENCY;
 
   const metrics = buildDashboardMetrics(reports, hourlyRate);
   const openCount = getOpenReportCount(reports);
   const critHigh = getCriticalHighCount(reports);
   const highestProcess = getHighestCostProcess(reports);
-  const roadmapItems = generateRoadmapItems(reports, hourlyRate);
+  const roadmapItems = generateRoadmapItems(reports, hourlyRate, currency, undefined);
   const roadmapTop = roadmapItems[0];
 
   const stats: BusinessImpactReportStats = {
@@ -194,14 +202,14 @@ export function generateBusinessImpactReport(
     roadmapClusterCount: roadmapItems.length,
   };
 
-  const exec = generateExecutiveSummary(metrics, roadmapTop, highestProcess, tone);
-  const keyMetrics = generateKeyMetricsSection(metrics, openCount, critHigh, highestProcess);
-  const categories = generateTopCategoriesSection(reports, hourlyRate);
-  const teamsProc = generateTeamsProcessesSection(reports, hourlyRate);
-  const bottlenecks = generateTopBottlenecksSection(roadmapItems);
+  const exec = generateExecutiveSummary(metrics, roadmapTop, highestProcess, tone, currency);
+  const keyMetrics = generateKeyMetricsSection(metrics, openCount, critHigh, highestProcess, currency);
+  const categories = generateTopCategoriesSection(reports, hourlyRate, currency);
+  const teamsProc = generateTeamsProcessesSection(reports, hourlyRate, currency);
+  const bottlenecks = generateTopBottlenecksSection(roadmapItems, currency);
   const fixes = generateRecommendedFixesSection(roadmapItems);
-  const savings = generateSavingsSection(metrics);
-  const next = generateNextStepsSection(roadmapItems, tone);
+  const savings = generateSavingsSection(metrics, currency);
+  const next = generateNextStepsSection(roadmapItems, tone, currency);
 
   const markdown = [
     "# FrictionMap Business Impact Report",

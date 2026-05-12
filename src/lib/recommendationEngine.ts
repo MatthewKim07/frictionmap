@@ -3,6 +3,8 @@
  * No external AI — patterns + category playbooks only.
  */
 
+import type { AppCurrencyCode } from "@/constants/currency";
+import { DEFAULT_APP_CURRENCY } from "@/constants/currency";
 import type { FrictionCategory, RoadmapPriorityLevel, Team } from "@/constants/friction";
 import { formatCurrency, formatHours } from "@/lib/frictionCalculations";
 import type {
@@ -405,8 +407,9 @@ function riskIfIgnoredText(
   monthlyCost: number,
   priorityLevel: RoadmapPriorityLevel,
   patterns: RoadmapDetectedPattern[],
+  currency: AppCurrencyCode,
 ): string {
-  const costPhrase = `Cost and time leakage can persist at roughly ${formatCurrency(Math.round(monthlyCost))}/month while this cluster stays unaddressed (estimate based on current reports, not a guarantee).`;
+  const costPhrase = `Cost and time leakage can persist at roughly ${formatCurrency(Math.round(monthlyCost), currency)}/month while this cluster stays unaddressed (estimate based on current reports, not a guarantee).`;
   const pri =
     priorityLevel === "Critical" || priorityLevel === "High"
       ? "Because this is ranked high priority, delays likely compound into missed deadlines, customer impact, or audit exposure depending on your context."
@@ -426,9 +429,9 @@ function riskIfIgnoredText(
   return `${cat[category]} ${costPhrase} ${pri}${extra}`;
 }
 
-function expectedBenefitText(monthlyHours: number, monthlyCost: number): string {
+function expectedBenefitText(monthlyHours: number, monthlyCost: number, currency: AppCurrencyCode): string {
   return (
-    `If you address this cluster, teams could recover a meaningful portion of the roughly **${formatHours(monthlyHours)}** and **${formatCurrency(Math.round(monthlyCost))}/month** modeled here. ` +
+    `If you address this cluster, teams could recover a meaningful portion of the roughly **${formatHours(monthlyHours)}** and **${formatCurrency(Math.round(monthlyCost), currency)}/month** modeled here. ` +
     "Treat that as directional: actual savings depend on adoption, scope of the fix, and what else changes in parallel."
   );
 }
@@ -494,6 +497,7 @@ export function buildRoadmapRecommendations(
   >,
   _metrics: DashboardMetrics,
   settings?: CompanyRecommendationSettings,
+  currency: AppCurrencyCode = DEFAULT_APP_CURRENCY,
 ): RoadmapRecommendationFields {
   const { category, process, relatedReports, monthlyHours, monthlyCost, priorityLevel, whyItMatters } = item;
   const patterns = detectPatterns(allReports, relatedReports, category, process);
@@ -521,8 +525,8 @@ export function buildRoadmapRecommendations(
     firstStep,
     whyItMatters: whyItMattersEnriched,
     implementationPlan: implementationPlanText(pb),
-    expectedBenefit: expectedBenefitText(monthlyHours, monthlyCost),
-    riskIfIgnored: riskIfIgnoredText(category, monthlyCost, priorityLevel, patterns),
+    expectedBenefit: expectedBenefitText(monthlyHours, monthlyCost, currency),
+    riskIfIgnored: riskIfIgnoredText(category, monthlyCost, priorityLevel, patterns, currency),
     adoptionNotes: adoptionNotesText(patterns, settings),
     difficulty,
     estimatedImplementationTime: estimatedTime(difficulty),

@@ -1,8 +1,7 @@
-import { FRICTION_CATEGORIES, FREQUENCIES, SEVERITIES, TEAMS } from "@/constants/friction";
+import { FRICTION_CATEGORIES, FREQUENCIES, SEVERITIES } from "@/constants/friction";
 import type { FrictionCategory, Frequency, FrictionReport, Severity, Team } from "@/types";
 
 const CAT = new Set<string>(FRICTION_CATEGORIES);
-const TEAM = new Set<string>(TEAMS);
 const FREQ = new Set<string>(FREQUENCIES);
 const SEV = new Set<string>(SEVERITIES);
 
@@ -190,8 +189,9 @@ export function parseFrictionReportsCsv(
     let category = categoryRaw;
     if (!CAT.has(category)) err.push(`invalid category "${categoryRaw}"`);
 
-    let team = teamRaw;
-    if (!TEAM.has(team)) err.push(`invalid team "${teamRaw}"`);
+    let team = teamRaw.trim();
+    if (!team) err.push(`invalid team "${teamRaw}"`);
+    if (team.length > 120) err.push("team label too long (max 120 chars)");
 
     const hours = Number(hoursRaw);
     if (!Number.isFinite(hours) || hours <= 0) err.push(`invalid timeLostHours "${hoursRaw}"`);

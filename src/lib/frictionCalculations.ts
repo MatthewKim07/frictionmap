@@ -1,3 +1,4 @@
+import { DEFAULT_APP_CURRENCY, type AppCurrencyCode } from "@/constants/currency";
 import { AVERAGE_HOURLY_COST, SEVERITIES } from "@/constants/friction";
 import type {
   FrictionCategory,
@@ -15,11 +16,18 @@ export interface FrictionFilters {
   selectedSeverity: Severity | null;
 }
 
-/** USD, whole dollars, en-US. */
-export function formatCurrency(value: number): string {
-  return new Intl.NumberFormat("en-US", {
+const CURRENCY_LOCALE: Record<AppCurrencyCode, string> = {
+  USD: "en-US",
+  CAD: "en-CA",
+  EUR: "en-IE",
+  GBP: "en-GB",
+};
+
+/** Whole units in the selected org currency (no FX; display only). */
+export function formatCurrency(value: number, currency: AppCurrencyCode = DEFAULT_APP_CURRENCY): string {
+  return new Intl.NumberFormat(CURRENCY_LOCALE[currency] ?? "en-US", {
     style: "currency",
-    currency: "USD",
+    currency,
     maximumFractionDigits: 0,
   }).format(value);
 }
@@ -312,7 +320,11 @@ export function getTeamMonthlyCosts(
 /**
  * Rule-based manager summary for the current filtered dataset.
  */
-export function buildInsightsPlainSummary(reports: FrictionReport[], hourlyRate: number = AVERAGE_HOURLY_COST): string {
+export function buildInsightsPlainSummary(
+  reports: FrictionReport[],
+  hourlyRate: number = AVERAGE_HOURLY_COST,
+  currency: AppCurrencyCode = DEFAULT_APP_CURRENCY,
+): string {
   if (!reports.length) return "";
 
   const top = getTopCategory(reports);
@@ -321,10 +333,10 @@ export function buildInsightsPlainSummary(reports: FrictionReport[], hourlyRate:
   const proc = getHighestCostProcess(reports);
   const crit = getCriticalHighCount(reports);
 
-  let text = `${top.category} is currently the largest source of lost time, costing an estimated ${formatCurrency(topCatCost)} per month.`;
+  let text = `${top.category} is currently the largest source of lost time, costing an estimated ${formatCurrency(topCatCost, currency)} per month.`;
 
   if (proc.process && proc.monthlyCost > 0) {
-    text += ` The highest-cost process cluster is ${proc.process} (${formatCurrency(Math.round(proc.monthlyCost))} per month).`;
+    text += ` The highest-cost process cluster is ${proc.process} (${formatCurrency(Math.round(proc.monthlyCost), currency)} per month).`;
   }
 
   if (crit > 0) {

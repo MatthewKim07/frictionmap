@@ -1,3 +1,5 @@
+import type { AppCurrencyCode } from "@/constants/currency";
+import { DEFAULT_APP_CURRENCY } from "@/constants/currency";
 import type { FrictionCategory, Frequency, ReportStatus, RoadmapPriorityLevel } from "@/constants/friction";
 import { AVERAGE_HOURLY_COST } from "@/constants/friction";
 import {
@@ -9,7 +11,7 @@ import {
   frequencyMultiplier,
   severityMultiplier,
 } from "@/lib/frictionCalculations";
-import { buildRoadmapRecommendations } from "@/lib/recommendationEngine";
+import { buildRoadmapRecommendations, type CompanyRecommendationSettings } from "@/lib/recommendationEngine";
 import type { DerivedRoadmapItem, FrictionReport } from "@/types";
 
 export { CATEGORY_BASE_FIRST_STEP as CATEGORY_FIRST_STEP } from "@/lib/recommendationEngine";
@@ -31,11 +33,12 @@ function whyItMattersText(
   related: FrictionReport[],
   monthlyHours: number,
   monthlyCost: number,
+  currency: AppCurrencyCode,
 ): string {
   const teams = [...new Set(related.map((r) => r.team))];
   const teamPhrase = teams.length <= 2 ? teams.join(" and ") : `${teams.length} teams`;
   return (
-    `${teamPhrase} lose roughly ${Math.round(monthlyHours)}h/month (~${formatCurrency(Math.round(monthlyCost))}) ` +
+    `${teamPhrase} lose roughly ${Math.round(monthlyHours)}h/month (~${formatCurrency(Math.round(monthlyCost), currency)}) ` +
     `to this bottleneck. Addressing it reduces rework and speeds customer-facing work.`
   );
 }
@@ -88,7 +91,10 @@ function formatFrequencyPlain(f: Frequency): string {
 }
 
 /** Plain-language “why #1” for the top-ranked opportunity. */
-export function buildWhyRankedFirstExplanation(item: DerivedRoadmapItem): string {
+export function buildWhyRankedFirstExplanation(
+  item: DerivedRoadmapItem,
+  currency: AppCurrencyCode = DEFAULT_APP_CURRENCY,
+): string {
   const n = item.relatedReports.length;
   const cost = Math.round(item.monthlyCost);
   const teams = [...new Set(item.relatedReports.map((r) => r.team))];
@@ -100,7 +106,7 @@ export function buildWhyRankedFirstExplanation(item: DerivedRoadmapItem): string
   if (weeklyOrFaster >= Math.ceil(n / 2)) {
     text += ", many on a weekly or faster cadence";
   }
-  text += `, and costs an estimated ${formatCurrency(cost)} per month.`;
+  text += `, and costs an estimated ${formatCurrency(cost, currency)} per month.`;
   if (sevHigh > 0) {
     text += ` ${sevHigh} linked ${sevHigh === 1 ? "report is" : "reports are"} high or critical severity.`;
   }
@@ -125,13 +131,13 @@ type RoadmapSortRow = {
 };
 
 /** Short summary for copy-to-clipboard. */
-export function formatRoadmapItemCopySummary(item: DerivedRoadmapItem): string {
+export function formatRoadmapItemCopySummary(item: DerivedRoadmapItem, currency: AppCurrencyCode = DEFAULT_APP_CURRENCY): string {
   return [
     `Problem: ${item.problemTitle}`,
     `Priority: ${item.priorityLevel}`,
     `Recommendation confidence: ${item.recommendationConfidence}`,
-    `Estimated monthly cost: ${formatCurrency(Math.round(item.monthlyCost))}`,
-    `Estimated annual cost: ${formatCurrency(Math.round(item.annualCost))}`,
+    `Estimated monthly cost: ${formatCurrency(Math.round(item.monthlyCost), currency)}`,
+    `Estimated annual cost: ${formatCurrency(Math.round(item.annualCost), currency)}`,
     `Suggested fix: ${item.suggestedFix}`,
     `First step: ${item.firstStep}`,
     `Implementation effort: ${item.difficulty} · ${item.estimatedImplementationTime}`,
@@ -144,6 +150,7 @@ export function formatRoadmapItemCopySummary(item: DerivedRoadmapItem): string {
 export function formatRoadmapItemExportText(
   item: DerivedRoadmapItem,
   hourlyRate: number = AVERAGE_HOURLY_COST,
+  currency: AppCurrencyCode = DEFAULT_APP_CURRENCY,
 ): string {
   const header = [
     `Problem: ${item.problemTitle}`,
@@ -152,8 +159,8 @@ export function formatRoadmapItemExportText(
     `Priority: ${item.priorityLevel}`,
     `Recommendation confidence: ${item.recommendationConfidence}`,
     `Cluster status: ${item.status}`,
-    `Estimated monthly cost: ${formatCurrency(Math.round(item.monthlyCost))}`,
-    `Estimated annual cost: ${formatCurrency(Math.round(item.annualCost))}`,
+    `Estimated monthly cost: ${formatCurrency(Math.round(item.monthlyCost), currency)}`,
+    `Estimated annual cost: ${formatCurrency(Math.round(item.annualCost), currency)}`,
     `Estimated monthly hours: ${formatHours(item.monthlyHours)}`,
     `Related reports: ${item.relatedReports.length}`,
     "",
@@ -183,19 +190,28 @@ export function formatRoadmapItemExportText(
       : ["  - (none beyond cluster defaults)"]),
     "",
     "Related reports:",
-    ...item.relatedReports.map((r) => `  - ${formatRelatedReportLine(r, hourlyRate)}`),
+    ...item.relatedReports.map((r) => `  - ${formatRelatedReportLine(r, hourlyRate, currency)}`),
   ];
   return header.join("\n");
 }
 
-export function formatRelatedReportLine(r: FrictionReport, hourlyRate: number = AVERAGE_HOURLY_COST): string {
-  return `${r.title} · ${r.team} · ${formatCurrency(Math.round(calculateMonthlyCost(r, hourlyRate)))}/mo · ${formatFrequencyPlain(r.frequency)} · ${r.status}`;
+export function formatRelatedReportLine(
+  r: FrictionReport,
+  hourlyRate: number = AVERAGE_HOURLY_COST,
+  currency: AppCurrencyCode = DEFAULT_APP_CURRENCY,
+): string {
+  return `${r.title} · ${r.team} · ${formatCurrency(Math.round(calculateMonthlyCost(r, hourlyRate)), currency)}/mo · ${formatFrequencyPlain(r.frequency)} · ${r.status}`;
 }
 
 /**
  * Groups reports by category + process and builds ranked roadmap rows.
  */
-export function generateRoadmapItems(reports: FrictionReport[], hourlyRate: number = AVERAGE_HOURLY_COST): DerivedRoadmapItem[] {
+export function generateRoadmapItems(
+  reports: FrictionReport[],
+  hourlyRate: number = AVERAGE_HOURLY_COST,
+  currency: AppCurrencyCode = DEFAULT_APP_CURRENCY,
+  recommendationSettings?: CompanyRecommendationSettings,
+): DerivedRoadmapItem[] {
   const buckets = new Map<string, FrictionReport[]>();
   for (const r of reports) {
     const key = `${r.category}|||${r.process}`;
@@ -222,7 +238,7 @@ export function generateRoadmapItems(reports: FrictionReport[], hourlyRate: numb
     });
 
     const problem = synthesizeProblem(relatedReports, category, process);
-    const whyItMattersBase = whyItMattersText(relatedReports, monthlyHours, monthlyCost);
+    const whyItMattersBase = whyItMattersText(relatedReports, monthlyHours, monthlyCost, currency);
     const problemTitle = problemTitleForCluster(relatedReports, process);
     const status = deriveClusterStatus(relatedReports);
 
@@ -260,6 +276,8 @@ export function generateRoadmapItems(reports: FrictionReport[], hourlyRate: numb
         whyItMatters: row.whyItMattersBase,
       },
       metrics,
+      recommendationSettings,
+      currency,
     );
     return {
       id: row.id,
