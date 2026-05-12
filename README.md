@@ -32,13 +32,14 @@ FrictionMap gives teams a lightweight way to report friction and automatically t
 - Filterable **Insights** dashboard with chart + table breakdowns
 - Ranked **Fix Roadmap** grouped by category/process with status updates
 - Exportable **Business Impact Report** (copy + markdown download)
+- **Settings** — company name, currency (CAD / USD / EUR / GBP), default team, custom teams, demo scenario, data-mode hint, reset demo / clear local data, category reference copy, **role simulation** (Employee / Manager / Operations Leader / Judge Demo), and lightweight **rollout tips**
 - **Integrations** screen with hackathon-safe mocks: Slack summary, Jira/Linear ticket markdown, CSV import/export (no API keys)
-- Demo scenario switcher:
+- Demo scenario switcher (also in **Settings**; quick controls remain on **Overview**):
   - Default Operations Team
   - Engineering Handoff Chaos
   - Finance Manual Workload
 - Local persistence with schema migration and corruption-safe fallback
-- Configurable blended hourly rate (default $50/hr)
+- Configurable blended hourly rate (default 50/hr in **USD** display until you pick another currency in Settings)
 
 ## Business Impact
 
