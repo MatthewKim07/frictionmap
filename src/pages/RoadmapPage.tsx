@@ -2,7 +2,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { useCallback, useMemo, useState } from "react";
 
 import { InsightsMetricCard } from "@/components/dashboard/InsightsMetricCard";
-import { CategoryPill, RoadmapPriorityPill, SeverityPill, StatusPill } from "@/components/ui/pills";
+import { CategoryPill, ImplementationDifficultyPill, RecommendationConfidencePill, RoadmapPriorityPill, SeverityPill, StatusPill } from "@/components/ui/pills";
 import {
   FRICTION_CATEGORIES,
   REPORT_STATUSES,
@@ -40,6 +40,10 @@ function previewFix(text: string, max = 96): string {
   const t = text.trim();
   if (t.length <= max) return t;
   return `${t.slice(0, max - 1)}…`;
+}
+
+function stripMarkdownBold(s: string): string {
+  return s.replace(/\*\*(.+?)\*\*/g, "$1");
 }
 
 async function copyToClipboard(text: string): Promise<boolean> {
@@ -595,6 +599,110 @@ export function RoadmapPage() {
                               {item.firstStep}
                             </div>
                           </div>
+
+                          <div style={{ marginBottom: 16 }}>
+                            <div style={{ fontSize: 12, fontWeight: 600, color: "var(--ink-mute)", marginBottom: 8 }}>
+                              Recommendation strength & effort
+                            </div>
+                            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
+                              <RecommendationConfidencePill level={item.recommendationConfidence} />
+                              <ImplementationDifficultyPill level={item.difficulty} />
+                              <span className="pill ink" style={{ fontSize: 12 }}>
+                                <span className="dot" />
+                                Timeline: {item.estimatedImplementationTime}
+                              </span>
+                            </div>
+                          </div>
+
+                          <div style={{ marginBottom: 16 }}>
+                            <div style={{ fontSize: 12, fontWeight: 600, color: "var(--ink-mute)", marginBottom: 8 }}>
+                              Implementation plan
+                            </div>
+                            <div
+                              style={{
+                                padding: "12px 14px",
+                                borderRadius: 10,
+                                background: "var(--paper-2)",
+                                border: "1px solid var(--rule)",
+                                fontSize: 14,
+                                color: "var(--ink-soft)",
+                                lineHeight: 1.55,
+                                whiteSpace: "pre-line",
+                              }}
+                            >
+                              {item.implementationPlan}
+                            </div>
+                          </div>
+
+                          <div
+                            style={{
+                              display: "grid",
+                              gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+                              gap: 16,
+                              marginBottom: 16,
+                            }}
+                          >
+                            <div>
+                              <div style={{ fontSize: 12, fontWeight: 600, color: "var(--ink-mute)", marginBottom: 6 }}>
+                                Expected benefit (estimate)
+                              </div>
+                              <p style={{ margin: 0, fontSize: 14, color: "var(--ink-soft)", lineHeight: 1.55 }}>
+                                {stripMarkdownBold(item.expectedBenefit)}
+                              </p>
+                            </div>
+                            <div>
+                              <div style={{ fontSize: 12, fontWeight: 600, color: "var(--ink-mute)", marginBottom: 6 }}>
+                                Risk if ignored
+                              </div>
+                              <p style={{ margin: 0, fontSize: 14, color: "var(--ink-soft)", lineHeight: 1.55 }}>{item.riskIfIgnored}</p>
+                            </div>
+                          </div>
+
+                          <div style={{ marginBottom: 16 }}>
+                            <div style={{ fontSize: 12, fontWeight: 600, color: "var(--ink-mute)", marginBottom: 6 }}>
+                              Adoption notes
+                            </div>
+                            <p style={{ margin: 0, fontSize: 14, color: "var(--ink-soft)", lineHeight: 1.55, whiteSpace: "pre-line" }}>
+                              {item.adoptionNotes}
+                            </p>
+                          </div>
+
+                          <div
+                            style={{
+                              display: "grid",
+                              gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+                              gap: 16,
+                              marginBottom: 16,
+                            }}
+                          >
+                            <div>
+                              <div style={{ fontSize: 12, fontWeight: 600, color: "var(--ink-mute)", marginBottom: 6 }}>
+                                Suggested owner
+                              </div>
+                              <p style={{ margin: 0, fontSize: 14, color: "var(--ink-soft)", lineHeight: 1.55 }}>{item.ownerSuggestion}</p>
+                            </div>
+                            <div>
+                              <div style={{ fontSize: 12, fontWeight: 600, color: "var(--ink-mute)", marginBottom: 6 }}>
+                                Success metric
+                              </div>
+                              <p style={{ margin: 0, fontSize: 14, color: "var(--ink-soft)", lineHeight: 1.55 }}>{item.successMetric}</p>
+                            </div>
+                          </div>
+
+                          {item.detectedPatterns.length > 0 && (
+                            <div style={{ marginBottom: 16 }}>
+                              <div style={{ fontSize: 12, fontWeight: 600, color: "var(--ink-mute)", marginBottom: 8 }}>
+                                Pattern signals
+                              </div>
+                              <ul style={{ margin: 0, paddingLeft: 18, color: "var(--ink-soft)", fontSize: 14, lineHeight: 1.5 }}>
+                                {item.detectedPatterns.map((p) => (
+                                  <li key={p.id}>
+                                    <strong style={{ fontWeight: 600 }}>{p.label}:</strong> {p.narrative}
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
 
                           <div style={{ marginBottom: 16 }}>
                             <div style={{ fontSize: 12, fontWeight: 600, color: "var(--ink-mute)", marginBottom: 8 }}>

@@ -88,8 +88,19 @@ export function generateTopBottlenecksSection(roadmapItems: DerivedRoadmapItem[]
 export function generateRecommendedFixesSection(roadmapItems: DerivedRoadmapItem[]): string {
   const top = roadmapItems.slice(0, 3);
   if (!top.length) return "## Recommended Fixes\n\n_No roadmap fixes available yet._\n";
-  const lines = top.map((item, i) => `${i + 1}. ${item.suggestedFix.trim()}`);
-  return `## Recommended Fixes\n\n${lines.join("\n\n")}\n`;
+  const lines = top.map((item, i) => {
+    const conf = item.recommendationConfidence;
+    return [
+      `### ${i + 1}. ${item.problemTitle} (${item.process})`,
+      `- **Confidence:** ${conf}`,
+      `- **Suggested fix:** ${item.suggestedFix.trim()}`,
+      `- **First step:** ${item.firstStep.trim()}`,
+      `- **Expected benefit (estimate):** ${item.expectedBenefit.replace(/\*\*/g, "")}`,
+      `- **Success metric:** ${item.successMetric}`,
+      "",
+    ].join("\n");
+  });
+  return `## Recommended Fixes\n\n${lines.join("\n")}\n`;
 }
 
 export function generateNextStepsSection(

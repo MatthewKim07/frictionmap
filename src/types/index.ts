@@ -18,6 +18,16 @@ export type {
   Team,
 } from "@/constants/friction";
 
+export type RecommendationConfidence = "High" | "Medium" | "Low";
+export type RecommendationDifficulty = "Low" | "Medium" | "High";
+
+/** Pattern label used by the recommendation engine and roadmap UI. */
+export interface RoadmapDetectedPattern {
+  id: string;
+  label: string;
+  narrative: string;
+}
+
 /** Single friction report submitted by an employee. */
 export interface FrictionReport {
   id: string;
@@ -54,6 +64,18 @@ export interface DerivedRoadmapItem {
   suggestedFix: string;
   /** Concrete first operational step by category. */
   firstStep: string;
+  /** Markdown-friendly bullets: immediate / medium / long-term. */
+  implementationPlan: string;
+  /** Plain-language benefit framing; estimates, not guarantees. */
+  expectedBenefit: string;
+  riskIfIgnored: string;
+  adoptionNotes: string;
+  difficulty: RecommendationDifficulty;
+  estimatedImplementationTime: string;
+  ownerSuggestion: string;
+  successMetric: string;
+  recommendationConfidence: RecommendationConfidence;
+  detectedPatterns: RoadmapDetectedPattern[];
   /** Derived from related report statuses (updates when reports are updated). */
   status: ReportStatus;
 }

@@ -1,6 +1,7 @@
 import type { FrictionCategory, Frequency, ReportStatus, RoadmapPriorityLevel } from "@/constants/friction";
 import { AVERAGE_HOURLY_COST } from "@/constants/friction";
 import {
+  buildDashboardMetrics,
   calculateMonthlyCost,
   calculateMonthlyHours,
   formatCurrency,
@@ -8,46 +9,10 @@ import {
   frequencyMultiplier,
   severityMultiplier,
 } from "@/lib/frictionCalculations";
+import { buildRoadmapRecommendations } from "@/lib/recommendationEngine";
 import type { DerivedRoadmapItem, FrictionReport } from "@/types";
 
-const CATEGORY_SUGGESTED_FIX: Record<FrictionCategory, string> = {
-  "Access delay":
-    "Create a self-service access request flow with predefined approval rules and automatic routing.",
-  "Approval bottleneck":
-    "Define approval thresholds so low-risk requests can be auto-approved or batched.",
-  "Manual data entry":
-    "Replace repeated copy-paste work with an API integration, CSV import, or scheduled automation.",
-  "Missing documentation":
-    "Create a short owner-approved runbook with setup steps, known issues, and escalation paths.",
-  "Duplicate work":
-    "Create a searchable internal project registry to prevent teams from rebuilding existing work.",
-  "Tool confusion":
-    "Consolidate tool guidance into a single source of truth with clear ownership.",
-  "Waiting on another team":
-    "Add service-level expectations and a shared request queue for cross-team dependencies.",
-  "Rework or error correction":
-    "Add checklist validation and clearer handoff requirements before work moves downstream.",
-};
-
-/** Rule-based “do this first” line per category. */
-export const CATEGORY_FIRST_STEP: Record<FrictionCategory, string> = {
-  "Access delay":
-    "List the top 3 access requests causing delays and define who can approve each one.",
-  "Approval bottleneck":
-    "Identify which approvals are low-risk and can be auto-approved or batched weekly.",
-  "Manual data entry":
-    "Document the repeated fields being copied and check whether both systems support CSV import or API access.",
-  "Missing documentation":
-    "Create a one-page runbook with owner, setup steps, common issues, and escalation path.",
-  "Duplicate work":
-    "Search for existing trackers or tools and assign one owner to consolidate them.",
-  "Tool confusion":
-    "Create a single source-of-truth page explaining which tool to use for which task.",
-  "Waiting on another team":
-    "Create a shared request queue with expected response times.",
-  "Rework or error correction":
-    "Add a checklist before handoff to catch missing or unclear information earlier.",
-};
+export { CATEGORY_BASE_FIRST_STEP as CATEGORY_FIRST_STEP } from "@/lib/recommendationEngine";
 
 function slugPart(s: string): string {
   return s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
@@ -143,15 +108,35 @@ export function buildWhyRankedFirstExplanation(item: DerivedRoadmapItem): string
   return text;
 }
 
+/** Sortable cluster row before recommendation enrichment. */
+type RoadmapSortRow = {
+  id: string;
+  problemTitle: string;
+  problem: string;
+  category: FrictionCategory;
+  process: string;
+  relatedReports: FrictionReport[];
+  monthlyHours: number;
+  monthlyCost: number;
+  annualCost: number;
+  priorityScore: number;
+  whyItMattersBase: string;
+  status: ReportStatus;
+};
+
 /** Short summary for copy-to-clipboard. */
 export function formatRoadmapItemCopySummary(item: DerivedRoadmapItem): string {
   return [
     `Problem: ${item.problemTitle}`,
     `Priority: ${item.priorityLevel}`,
+    `Recommendation confidence: ${item.recommendationConfidence}`,
     `Estimated monthly cost: ${formatCurrency(Math.round(item.monthlyCost))}`,
     `Estimated annual cost: ${formatCurrency(Math.round(item.annualCost))}`,
     `Suggested fix: ${item.suggestedFix}`,
     `First step: ${item.firstStep}`,
+    `Implementation effort: ${item.difficulty} · ${item.estimatedImplementationTime}`,
+    `Suggested owner: ${item.ownerSuggestion}`,
+    `Success metric: ${item.successMetric}`,
   ].join("\n");
 }
 
@@ -165,6 +150,7 @@ export function formatRoadmapItemExportText(
     `Category: ${item.category}`,
     `Process / tool: ${item.process}`,
     `Priority: ${item.priorityLevel}`,
+    `Recommendation confidence: ${item.recommendationConfidence}`,
     `Cluster status: ${item.status}`,
     `Estimated monthly cost: ${formatCurrency(Math.round(item.monthlyCost))}`,
     `Estimated annual cost: ${formatCurrency(Math.round(item.annualCost))}`,
@@ -176,6 +162,25 @@ export function formatRoadmapItemExportText(
     `Suggested fix: ${item.suggestedFix}`,
     "",
     `Recommended first step: ${item.firstStep}`,
+    "",
+    "Implementation plan:",
+    item.implementationPlan,
+    "",
+    `Expected benefit (estimate): ${item.expectedBenefit}`,
+    "",
+    `Risk if ignored: ${item.riskIfIgnored}`,
+    "",
+    `Adoption notes: ${item.adoptionNotes}`,
+    "",
+    `Difficulty: ${item.difficulty}`,
+    `Estimated implementation time: ${item.estimatedImplementationTime}`,
+    `Suggested owner: ${item.ownerSuggestion}`,
+    `Success metric: ${item.successMetric}`,
+    "",
+    "Pattern signals:",
+    ...(item.detectedPatterns.length
+      ? item.detectedPatterns.map((p) => `  - ${p.label}: ${p.narrative}`)
+      : ["  - (none beyond cluster defaults)"]),
     "",
     "Related reports:",
     ...item.relatedReports.map((r) => `  - ${formatRelatedReportLine(r, hourlyRate)}`),
@@ -199,7 +204,7 @@ export function generateRoadmapItems(reports: FrictionReport[], hourlyRate: numb
     buckets.set(key, list);
   }
 
-  const raw = [...buckets.entries()].map(([key, relatedReports]) => {
+  const raw: RoadmapSortRow[] = [...buckets.entries()].map(([key, relatedReports]) => {
     const [category, process] = key.split("|||") as [FrictionCategory, string];
     const monthlyHours = relatedReports.reduce((s, r) => s + calculateMonthlyHours(r), 0);
     const monthlyCost = relatedReports.reduce((s, r) => s + calculateMonthlyCost(r, hourlyRate), 0);
@@ -217,14 +222,11 @@ export function generateRoadmapItems(reports: FrictionReport[], hourlyRate: numb
     });
 
     const problem = synthesizeProblem(relatedReports, category, process);
-    const suggestedTemplate = CATEGORY_SUGGESTED_FIX[category];
-    const customSuggestion = relatedReports.map((r) => r.suggestion).find((s) => s.trim().length > 0);
-    const whyItMatters = whyItMattersText(relatedReports, monthlyHours, monthlyCost);
+    const whyItMattersBase = whyItMattersText(relatedReports, monthlyHours, monthlyCost);
     const problemTitle = problemTitleForCluster(relatedReports, process);
-    const firstStep = CATEGORY_FIRST_STEP[category];
     const status = deriveClusterStatus(relatedReports);
 
-    const item: DerivedRoadmapItem = {
+    return {
       id: `roadmap-${slugPart(category)}-${slugPart(process)}`,
       problemTitle,
       problem,
@@ -235,16 +237,44 @@ export function generateRoadmapItems(reports: FrictionReport[], hourlyRate: numb
       monthlyCost,
       annualCost,
       priorityScore,
-      priorityLevel: "Low",
-      whyItMatters,
-      suggestedFix: customSuggestion?.trim() ? customSuggestion : suggestedTemplate,
-      firstStep,
+      whyItMattersBase,
       status,
     };
-    return item;
   });
 
   raw.sort((a, b) => b.priorityScore - a.priorityScore);
   const levels = assignPriorityLevels(raw.map((r) => r.priorityScore));
-  return raw.map((item, i) => ({ ...item, priorityLevel: levels[i]! }));
+  const metrics = buildDashboardMetrics(reports, hourlyRate);
+
+  return raw.map((row, i) => {
+    const priorityLevel = levels[i]!;
+    const rec = buildRoadmapRecommendations(
+      reports,
+      {
+        category: row.category,
+        process: row.process,
+        relatedReports: row.relatedReports,
+        monthlyHours: row.monthlyHours,
+        monthlyCost: row.monthlyCost,
+        priorityLevel,
+        whyItMatters: row.whyItMattersBase,
+      },
+      metrics,
+    );
+    return {
+      id: row.id,
+      problemTitle: row.problemTitle,
+      problem: row.problem,
+      category: row.category,
+      process: row.process,
+      relatedReports: row.relatedReports,
+      monthlyHours: row.monthlyHours,
+      monthlyCost: row.monthlyCost,
+      annualCost: row.annualCost,
+      priorityScore: row.priorityScore,
+      priorityLevel,
+      status: row.status,
+      ...rec,
+    };
+  });
 }
