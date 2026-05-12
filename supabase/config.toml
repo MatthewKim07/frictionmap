@@ -1,0 +1,12 @@
+# Supabase local / deploy config. Edge Functions below use verify_jwt = false so the
+# existing FrictionMap SPA (no end-user auth) can invoke them with the anon key.
+# Lock down in production: enable JWT verification and/or add your own gateway auth.
+
+[functions.post-slack-webhook]
+verify_jwt = false
+
+[functions.create-jira-issue]
+verify_jwt = false
+
+[functions.create-linear-issue]
+verify_jwt = false

@@ -104,6 +104,9 @@ dist
 # vitepress cache directory
 **/.vitepress/cache
 
+# Supabase CLI (local link metadata — do not commit)
+supabase/.temp/
+
 # Docusaurus cache and generated files
 .docusaurus
 

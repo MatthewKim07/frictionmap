@@ -32,6 +32,7 @@ FrictionMap gives teams a lightweight way to report friction and automatically t
 - Filterable **Insights** dashboard with chart + table breakdowns
 - Ranked **Fix Roadmap** grouped by category/process with status updates
 - Exportable **Business Impact Report** (copy + markdown download)
+- **Integrations** screen with hackathon-safe mocks: Slack summary, Jira/Linear ticket markdown, CSV import/export (no API keys)
 - Demo scenario switcher:
   - Default Operations Team
   - Engineering Handoff Chaos
@@ -104,13 +105,35 @@ npm run preview
 4. Open **Insights** to show team/category/process breakdowns.
 5. Open **Fix Roadmap** to show top ranked bottlenecks and status actions.
 6. Generate and export **Business Impact Report**.
-7. Optional: refresh page and show persistence mode indicator (`Supabase connected` / `Local demo mode` / `Offline fallback`).
+7. Open **Integrations** — copy Slack/Jira/Linear drafts, import/export CSV, or (optional) deploy Edge Functions for **live** Slack/Jira/Linear.
+
+## Integrations (copy + optional live)
+
+The **Integrations** tab always supports **copy/paste and CSV** in the browser (no backend required).
+
+**Optional live mode:** deploy Supabase Edge Functions in `supabase/functions/` and add vendor credentials as **Function secrets** (not `VITE_*` variables). The SPA calls `supabase.functions.invoke` with the anon key; tokens never ship to end users.
+
+| Capability | Copy/mock | Live (Edge Functions) |
+|------------|-----------|------------------------|
+| Slack summary | Yes | `post-slack-webhook` + `SLACK_INCOMING_WEBHOOK_URL` |
+| Jira issue | Markdown copy | `create-jira-issue` + `JIRA_DOMAIN`, `JIRA_EMAIL`, `JIRA_API_TOKEN` |
+| Linear issue | Markdown copy | `create-linear-issue` + `LINEAR_API_KEY` |
+| CSV import/export | Yes | N/A |
+
+Step-by-step: **`docs/integrations-edge-functions.md`**.
+
+**Integration settings** (Slack cost line, related reports in tickets, default priority, Jira project key / issue type, Linear team ID) persist in the same browser storage as the rest of the app. Jira/Linear **secrets** are only on Supabase.
+
+### Hardening for production
+
+- Enable **JWT verification** on Edge Functions and/or add a shared secret header once you have auth.
+- Prefer **OAuth** for multi-tenant SaaS; this repo uses API tokens / webhooks for a single internal deployment.
 
 ## Future Improvements
 
 - Authentication + role-based access
 - Backend/database persistence
-- Slack/Jira/Linear integrations
+- Multi-tenant OAuth for Slack / Jira / Linear (beyond single-workspace Edge Function secrets)
 - Organization-level trend benchmarking
 - Automated before/after impact tracking
 - AI-assisted fix recommendations with confidence scoring
@@ -133,7 +156,8 @@ Key directories:
 - `src/lib` — calculations, roadmap generation, report generation, Supabase/repository adapters
 - `src/data` — scenario datasets and defaults
 - `src/components` — shared UI, layout, charts, modals, demo controls
-- `docs/devpost-submission-draft.md` — copy-ready submission draft
+- `supabase/functions` — optional Edge Functions for live Slack / Jira / Linear
+- `docs/integrations-edge-functions.md` — deploy secrets and CLI commands
 - `docs/supabase-schema.sql` — SQL schema + index + RLS notes
 
 ---

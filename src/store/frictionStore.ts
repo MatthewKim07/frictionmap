@@ -8,6 +8,11 @@ import {
   SEVERITIES,
   TEAMS,
 } from "@/constants/friction";
+import {
+  defaultIntegrationSettings,
+  sanitizeIntegrationSettings,
+  type IntegrationSettings,
+} from "@/constants/integrationSettings";
 import { STORAGE_KEY_PRIMARY, PERSIST_STORE_VERSION } from "@/constants/persist";
 import { cloneScenarioReports } from "@/data/demoScenarios";
 import {
@@ -29,7 +34,7 @@ import { generateRoadmapItems } from "@/lib/roadmap";
 import type { DataConnectionMode } from "@/lib/supabase";
 import type { FrictionReport } from "@/types";
 
-export type AppPage = "overview" | "submit" | "insights" | "roadmap";
+export type AppPage = "overview" | "submit" | "insights" | "roadmap" | "integrations";
 
 export type ToastState = { msg: string } | null;
 
@@ -209,6 +214,9 @@ interface FrictionStoreState {
   /** One-shot notice after hydrate when storage was repaired — UI may toast once. */
   persistRecoverNotice: string | null;
 
+  /** Mock integration toggles (Slack copy, ticket body, etc.) — persisted locally. */
+  integrationSettings: IntegrationSettings;
+
   /** Short-lived toast notifications (scenario load, resets, hydrate warnings). */
   pulseToast: (msg: string) => void;
   flushPersistRecoverIfAny: () => void;
@@ -233,6 +241,10 @@ interface FrictionStoreState {
   ) => void;
   deleteReport: (id: string) => void;
   resetDemoData: () => void;
+
+  setIntegrationSettings: (partial: Partial<IntegrationSettings>) => void;
+  /** Bulk-add reports (e.g. CSV import). Syncs replace to repository. */
+  importReports: (incoming: FrictionReport[]) => void;
 }
 
 export const useFrictionStore = create<FrictionStoreState>()(
@@ -249,6 +261,7 @@ export const useFrictionStore = create<FrictionStoreState>()(
       hourlyRate: sanitizeHourlyRate(undefined),
       demoScenarioId: "operations",
       persistRecoverNotice: null,
+      integrationSettings: defaultIntegrationSettings(),
 
       pulseToast: (msg) => {
         set({ toast: { msg } });
@@ -393,6 +406,24 @@ export const useFrictionStore = create<FrictionStoreState>()(
         });
         get().pulseToast("Reports reset to the current demo scenario baseline.");
       },
+
+      setIntegrationSettings: (partial) =>
+        set((s) => ({
+          integrationSettings: { ...s.integrationSettings, ...partial },
+        })),
+
+      importReports: (incoming) => {
+        if (!incoming.length) return;
+        set((s) => ({
+          reports: [...incoming, ...s.reports],
+        }));
+        const current = get().reports;
+        void repoReplaceReports(current).then((res) => {
+          set({ dataConnectionMode: res.mode, reportError: res.warning ?? null });
+          if (res.warning) get().pulseToast(res.warning);
+        });
+        get().pulseToast(`Imported ${incoming.length} friction report${incoming.length === 1 ? "" : "s"}.`);
+      },
     }),
     {
       name: STORAGE_KEY_PRIMARY,
@@ -431,6 +462,7 @@ export const useFrictionStore = create<FrictionStoreState>()(
         reports: state.reports,
         hourlyRate: state.hourlyRate,
         demoScenarioId: state.demoScenarioId,
+        integrationSettings: state.integrationSettings,
       }),
       merge: (persisted, current) => {
         if (persisted === undefined || persisted === null) {
@@ -442,6 +474,7 @@ export const useFrictionStore = create<FrictionStoreState>()(
             reports: getDefaultReportsSnapshot(),
             hourlyRate: sanitizeHourlyRate(undefined),
             demoScenarioId: "operations",
+            integrationSettings: defaultIntegrationSettings(),
             persistRecoverNotice: "Saved settings were unreadable — restored the default Operations demo.",
           };
         }
@@ -457,22 +490,26 @@ export const useFrictionStore = create<FrictionStoreState>()(
 
         const hourlyRate = sanitizeHourlyRate(saved.hourlyRate);
         const demoScenarioId = sanitizeScenarioId(saved.demoScenarioId);
+        const integrationSettings = sanitizeIntegrationSettings(saved.integrationSettings);
 
         return {
           ...current,
           reports,
           hourlyRate,
           demoScenarioId,
+          integrationSettings,
           persistRecoverNotice: recoverNotice,
         };
       },
-      migrate: (oldState: unknown, _fromVersion: number) => {
+      migrate: (oldState: unknown, fromVersion: number) => {
         const p = typeof oldState === "object" && oldState !== null ? (oldState as Record<string, unknown>) : {};
         const { reports } = sanitizeReportsArray(p.reports);
         return {
           reports,
           hourlyRate: sanitizeHourlyRate(p.hourlyRate),
           demoScenarioId: sanitizeScenarioId(p.demoScenarioId),
+          integrationSettings:
+            fromVersion >= 3 ? sanitizeIntegrationSettings(p.integrationSettings) : defaultIntegrationSettings(),
         };
       },
     },

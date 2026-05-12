@@ -9,6 +9,7 @@ const TABS = [
   { id: "submit" as const, label: "Report Friction" },
   { id: "insights" as const, label: "Insights" },
   { id: "roadmap" as const, label: "Fix Roadmap" },
+  { id: "integrations" as const, label: "Integrations" },
 ];
 
 export function AppShell({ children }: { children: ReactNode }) {

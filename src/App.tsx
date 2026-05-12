@@ -1,5 +1,6 @@
 import { AppShell } from "@/components/layout/AppShell";
 import { InsightsPage } from "@/pages/InsightsPage";
+import { IntegrationsPage } from "@/pages/IntegrationsPage";
 import { OverviewPage } from "@/pages/OverviewPage";
 import { RoadmapPage } from "@/pages/RoadmapPage";
 import { SubmitPage } from "@/pages/SubmitPage";
@@ -14,6 +15,7 @@ export default function App() {
       {page === "submit" && <SubmitPage />}
       {page === "insights" && <InsightsPage />}
       {page === "roadmap" && <RoadmapPage />}
+      {page === "integrations" && <IntegrationsPage />}
     </AppShell>
   );
 }
