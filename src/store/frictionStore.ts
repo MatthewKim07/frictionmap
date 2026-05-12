@@ -283,13 +283,17 @@ export const useFrictionStore = create<FrictionStoreState>()(
         set({ isLoadingReports: true, reportError: null });
         try {
           const res = await repoGetReports();
-          const fallback = get().reports;
-          const next =
-            res.data.length > 0
-              ? sanitizeReportsArray(res.data).reports
-              : fallback.length > 0
-                ? fallback
-                : getDefaultReportsSnapshot();
+          // When Supabase is connected and returns 0 rows, respect that (empty DB).
+          // Only fall back to seed data when in local/demo mode.
+          let next: FrictionReport[];
+          if (res.mode === "supabase-connected") {
+            next = sanitizeReportsArray(res.data).reports;
+          } else if (res.data.length > 0) {
+            next = sanitizeReportsArray(res.data).reports;
+          } else {
+            const localFallback = get().reports;
+            next = localFallback.length > 0 ? localFallback : getDefaultReportsSnapshot();
+          }
           set({
             reports: next,
             dataConnectionMode: res.mode,
