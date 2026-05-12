@@ -9,11 +9,11 @@ import {
 import { InsightsMetricCard } from "@/components/dashboard/InsightsMetricCard";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { CategoryPill, SeverityPill, StatusPill } from "@/components/ui/pills";
+import { getEffectiveTeamOptions } from "@/constants/companySettings";
 import {
   FRICTION_CATEGORIES,
   REPORT_STATUSES,
   SEVERITIES,
-  TEAMS,
 } from "@/constants/friction";
 import {
   buildDashboardMetrics,
@@ -50,8 +50,21 @@ export function InsightsPage() {
   const setPage = useFrictionStore((s) => s.setPage);
   const setImpactReportModalOpen = useFrictionStore((s) => s.setImpactReportModalOpen);
   const hourlyRate = useFrictionStore((s) => s.hourlyRate);
+  const companySettings = useFrictionStore((s) => s.companySettings);
+  const currencyCode = companySettings.currencyCode;
+
+  const teamFilterOptions = useMemo(() => {
+    const base = getEffectiveTeamOptions(companySettings);
+    const fromData = [...new Set(reports.map((r) => r.team))];
+    const merged = [...base];
+    for (const t of fromData) {
+      if (!merged.includes(t)) merged.push(t);
+    }
+    return merged.sort((a, b) => a.localeCompare(b));
+  }, [companySettings, reports]);
 
   const filtered = useMemo(() => filterReports(reports, filters), [reports, filters]);
+
   const hasAnyReports = reports.length > 0;
   const isFilteredEmpty = hasAnyReports && filtered.length === 0;
 
@@ -64,7 +77,10 @@ export function InsightsPage() {
   const openCount = useMemo(() => getOpenReportCount(filtered), [filtered]);
   const critHigh = useMemo(() => getCriticalHighCount(filtered), [filtered]);
   const avgScore = useMemo(() => getAverageFrictionScore(filtered), [filtered]);
-  const summaryText = useMemo(() => buildInsightsPlainSummary(filtered, hourlyRate), [filtered, hourlyRate]);
+  const summaryText = useMemo(
+    () => buildInsightsPlainSummary(filtered, hourlyRate, currencyCode),
+    [filtered, hourlyRate, currencyCode],
+  );
 
   const categoryChartData = useMemo(
     () =>
@@ -187,7 +203,7 @@ export function InsightsPage() {
             }}
           >
             <option value="">All teams</option>
-            {TEAMS.map((t) => (
+            {teamFilterOptions.map((t) => (
               <option key={t} value={t}>
                 {t}
               </option>
@@ -281,8 +297,8 @@ export function InsightsPage() {
         />
         <InsightsMetricCard
           label="Monthly cost leakage"
-          value={formatCurrency(metrics.monthlyCostLost)}
-          explanation={`Blended rate ${formatCurrency(hourlyRate)}/hr (editable on Overview demo settings).`}
+          value={formatCurrency(metrics.monthlyCostLost, currencyCode)}
+          explanation={`Blended rate ${formatCurrency(hourlyRate, currencyCode)}/hr (editable in Settings).`}
           impactLabel="Answers: What is this costing?"
           icon="$"
           tone="amber"
@@ -290,7 +306,7 @@ export function InsightsPage() {
         />
         <InsightsMetricCard
           label="Annualized risk"
-          value={formatCurrency(metrics.annualizedCostLost)}
+          value={formatCurrency(metrics.annualizedCostLost, currencyCode)}
           explanation="Monthly cost × 12 — rough annual exposure."
           icon="◎"
           tone="amber"
@@ -310,7 +326,7 @@ export function InsightsPage() {
           value={metrics.topCategory ?? "—"}
           explanation={
             metrics.topCategory
-              ? `About ${formatCurrency(topCatCost)} per month at current volume.`
+              ? `About ${formatCurrency(topCatCost, currencyCode)} per month at current volume.`
               : "No category data in this view."
           }
           icon="▦"
@@ -322,7 +338,7 @@ export function InsightsPage() {
           value={highestProcess.process || "—"}
           explanation={
             highestProcess.monthlyCost > 0
-              ? `${formatCurrency(Math.round(highestProcess.monthlyCost))} per month aggregated.`
+              ? `${formatCurrency(Math.round(highestProcess.monthlyCost), currencyCode)} per month aggregated.`
               : "No process data in this view."
           }
           impactLabel="Start investigations here"
@@ -398,6 +414,7 @@ export function InsightsPage() {
             data={teamCostData}
             title="Monthly cost by team"
             summary="Which teams carry the largest estimated dollar drag at the blended hourly rate."
+            currency={currencyCode}
           />
         )}
       </div>
@@ -459,7 +476,7 @@ export function InsightsPage() {
                       {formatHours(row.monthlyHours)}
                     </td>
                     <td style={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}>
-                      {formatCurrency(row.monthlyCost)}
+                      {formatCurrency(row.monthlyCost, currencyCode)}
                     </td>
                   </tr>
                 ))
@@ -509,7 +526,7 @@ export function InsightsPage() {
                     <SeverityPill severity={r.severity} />
                   </td>
                   <td style={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}>
-                    {formatCurrency(Math.round(calculateMonthlyCost(r, hourlyRate)))}
+                    {formatCurrency(Math.round(calculateMonthlyCost(r, hourlyRate)), currencyCode)}
                   </td>
                   <td>
                     <StatusPill status={r.status} />

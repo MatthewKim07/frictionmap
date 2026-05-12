@@ -7,6 +7,7 @@ import { useFrictionStore } from "@/store/frictionStore";
 export function DemoControlsPanel() {
   const demoScenarioId = useFrictionStore((s) => s.demoScenarioId);
   const hourlyRate = useFrictionStore((s) => s.hourlyRate);
+  const currencyCode = useFrictionStore((s) => s.companySettings.currencyCode);
   const loadDemoScenario = useFrictionStore((s) => s.loadDemoScenario);
   const setHourlyRate = useFrictionStore((s) => s.setHourlyRate);
   const resetDemoData = useFrictionStore((s) => s.resetDemoData);
@@ -87,7 +88,7 @@ export function DemoControlsPanel() {
         </div>
 
         <div className="field">
-          <label htmlFor="demo-hourly-rate">Blended hourly cost (USD)</label>
+          <label htmlFor="demo-hourly-rate">Blended hourly cost ({currencyCode})</label>
           <div style={{ display: "flex", gap: 10, alignItems: "stretch", flexWrap: "wrap" }}>
             <input
               id="demo-hourly-rate"
@@ -105,7 +106,7 @@ export function DemoControlsPanel() {
               aria-describedby="demo-hourly-hint"
             />
             <span className="hint" style={{ alignSelf: "center" }} id="demo-hourly-hint">
-              {`${MIN_HOURLY_RATE}–${MAX_HOURLY_RATE}`} USD · drives monthly cost estimates
+              {`${MIN_HOURLY_RATE}–${MAX_HOURLY_RATE}`} {currencyCode} · drives monthly cost estimates
             </span>
           </div>
         </div>

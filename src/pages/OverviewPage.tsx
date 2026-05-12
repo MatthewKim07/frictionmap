@@ -2,6 +2,7 @@ import { motion } from "framer-motion";
 import { useMemo } from "react";
 
 import { DemoControlsPanel } from "@/components/demo/DemoControlsPanel";
+import { DEFAULT_COMPANY_NAME } from "@/constants/companySettings";
 import { BarRow } from "@/components/dashboard/BarRow";
 import { InsightsMetricCard } from "@/components/dashboard/InsightsMetricCard";
 import { CategoryPill, RoadmapPriorityPill, SeverityPill } from "@/components/ui/pills";
@@ -22,25 +23,33 @@ import { useFrictionStore } from "@/store/frictionStore";
 export function OverviewPage() {
   const reports = useFrictionStore((s) => s.reports);
   const hourlyRate = useFrictionStore((s) => s.hourlyRate);
+  const currencyCode = useFrictionStore((s) => s.companySettings.currencyCode);
+  const companyName = useFrictionStore((s) => s.companySettings.companyName);
   const setPage = useFrictionStore((s) => s.setPage);
   const setImpactReportModalOpen = useFrictionStore((s) => s.setImpactReportModalOpen);
 
   const metrics = useMemo(() => buildDashboardMetrics(reports, hourlyRate), [reports, hourlyRate]);
   const openCount = useMemo(() => getOpenReportCount(reports), [reports]);
   const highestProcess = useMemo(() => getHighestCostProcess(reports), [reports]);
-  const topRoadmap = useMemo(() => generateRoadmapItems(reports, hourlyRate)[0] ?? null, [reports, hourlyRate]);
+  const orgTrim = companyName.trim();
+  const roadmapRec =
+    orgTrim && orgTrim !== DEFAULT_COMPANY_NAME ? { organizationLabel: orgTrim } : undefined;
+  const topRoadmap = useMemo(
+    () => generateRoadmapItems(reports, hourlyRate, currencyCode, roadmapRec)[0] ?? null,
+    [reports, hourlyRate, currencyCode, orgTrim],
+  );
   const recentFive = useMemo(() => getRecentReports(reports, 5), [reports]);
   const categoryRows = useMemo(() => getCategoryImpactRows(reports, hourlyRate), [reports, hourlyRate]);
   const maxCatHours = categoryRows[0]?.monthlyHours ?? 1;
 
   const topCategoryLabel = metrics.topCategory ?? "—";
   const topCategorySub = metrics.topCategory
-    ? `${formatHours(metrics.topCategoryMonthlyHours)} · ${formatCurrency(Math.round(metrics.topCategoryMonthlyHours * hourlyRate))}/mo`
+    ? `${formatHours(metrics.topCategoryMonthlyHours)} · ${formatCurrency(Math.round(metrics.topCategoryMonthlyHours * hourlyRate), currencyCode)}/mo`
     : "Submit reports to see which category drives the most drag.";
 
   const processSub =
     highestProcess.process && highestProcess.monthlyCost > 0
-      ? `${formatCurrency(Math.round(highestProcess.monthlyCost))}/mo aggregated across reports`
+      ? `${formatCurrency(Math.round(highestProcess.monthlyCost), currencyCode)}/mo aggregated across reports`
       : "No process cluster yet — add friction reports to populate this.";
 
   return (
@@ -100,15 +109,15 @@ export function OverviewPage() {
               />
               <InsightsMetricCard
                 label="Monthly cost"
-                value={formatCurrency(metrics.monthlyCostLost)}
-                explanation={`At ${formatCurrency(hourlyRate)}/hr blended rate.`}
+                value={formatCurrency(metrics.monthlyCostLost, currencyCode)}
+                explanation={`At ${formatCurrency(hourlyRate, currencyCode)}/hr blended rate.`}
                 icon="$"
                 tone="amber"
                 delay={0.04}
               />
               <InsightsMetricCard
                 label="Annualized"
-                value={formatCurrency(metrics.annualizedCostLost)}
+                value={formatCurrency(metrics.annualizedCostLost, currencyCode)}
                 explanation="Monthly cost × 12."
                 icon="12"
                 tone="lime"
@@ -162,7 +171,7 @@ export function OverviewPage() {
                 {topRoadmap.problemTitle}
               </h2>
               <div style={{ fontSize: 14, fontWeight: 600, color: "var(--coral)", marginBottom: 14, fontVariantNumeric: "tabular-nums" }}>
-                {formatCurrency(Math.round(topRoadmap.monthlyCost))}/mo estimated leakage
+                {formatCurrency(Math.round(topRoadmap.monthlyCost), currencyCode)}/mo estimated leakage
               </div>
               <button type="button" className="btn secondary" onClick={() => setPage("roadmap")}>
                 Open Fix Roadmap
@@ -194,7 +203,7 @@ export function OverviewPage() {
                         <td style={{ padding: "9px 8px", color: "var(--ink-soft)", whiteSpace: "nowrap" }}>{r.team}</td>
                         <td style={{ padding: "9px 8px" }}><SeverityPill severity={r.severity} /></td>
                         <td style={{ padding: "9px 0 9px 8px", fontVariantNumeric: "tabular-nums", color: "var(--ink-soft)", whiteSpace: "nowrap" }}>
-                          {formatCurrency(Math.round(calculateMonthlyCost(r, hourlyRate)))}
+                          {formatCurrency(Math.round(calculateMonthlyCost(r, hourlyRate)), currencyCode)}
                         </td>
                       </tr>
                     ))}
@@ -218,7 +227,7 @@ export function OverviewPage() {
                       color={categoryColorHex(row.category)}
                     />
                     <div style={{ fontSize: 12, color: "var(--ink-mute)", marginTop: 3, paddingLeft: 2, fontVariantNumeric: "tabular-nums" }}>
-                      {formatCurrency(row.monthlyCost)}/mo · {formatHours(row.monthlyHours)}
+                      {formatCurrency(row.monthlyCost, currencyCode)}/mo · {formatHours(row.monthlyHours)}
                     </div>
                   </div>
                 ))}

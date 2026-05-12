@@ -11,6 +11,8 @@ import {
   YAxis,
 } from "recharts";
 
+import type { AppCurrencyCode } from "@/constants/currency";
+import { DEFAULT_APP_CURRENCY } from "@/constants/currency";
 import type { FrictionCategory } from "@/types";
 import { categoryColorHex } from "@/lib/categoryMeta";
 import { formatCurrency, formatHours } from "@/lib/frictionCalculations";
@@ -93,10 +95,12 @@ export function TeamCostBarChart({
   data,
   title,
   summary,
+  currency = DEFAULT_APP_CURRENCY,
 }: {
   data: { name: string; cost: number }[];
   title: string;
   summary: string;
+  currency?: AppCurrencyCode;
 }) {
   const sorted = [...data].sort((a, b) => b.cost - a.cost);
   if (!sorted.length) return null;
@@ -114,11 +118,11 @@ export function TeamCostBarChart({
             <XAxis
               type="number"
               tick={{ fontSize: 11, fill: "var(--ink-mute)" }}
-              tickFormatter={(v) => formatCurrency(Number(v))}
+              tickFormatter={(v) => formatCurrency(Number(v), currency)}
             />
             <YAxis type="category" dataKey="name" width={120} tick={{ fontSize: 11, fill: "var(--ink)" }} interval={0} />
             <Tooltip
-              formatter={(value: number) => [formatCurrency(value), "Monthly cost"]}
+              formatter={(value: number) => [formatCurrency(value, currency), "Monthly cost"]}
               contentStyle={{
                 borderRadius: 8,
                 border: "1px solid var(--rule-strong)",
@@ -136,7 +140,7 @@ export function TeamCostBarChart({
       <ul style={{ margin: "12px 0 0", paddingLeft: 18, fontSize: 12, color: "var(--ink-soft)" }}>
         {sorted.map((row) => (
           <li key={row.name}>
-            <strong style={{ color: "var(--ink)" }}>{row.name}</strong>: {formatCurrency(row.cost)} per month
+            <strong style={{ color: "var(--ink)" }}>{row.name}</strong>: {formatCurrency(row.cost, currency)} per month
           </li>
         ))}
       </ul>

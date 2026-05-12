@@ -1,20 +1,22 @@
 import { motion } from "framer-motion";
-import { useCallback, useMemo, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 
 import { CategoryPill, SeverityPill, StatusPill } from "@/components/ui/pills";
 import { Pill } from "@/components/ui/Pill";
+import { FRICTION_CATEGORY_DESCRIPTIONS } from "@/constants/categoryDescriptions";
+import { getEffectiveTeamOptions } from "@/constants/companySettings";
 import {
   FREQUENCIES,
   FRICTION_CATEGORIES,
   PROCESS_OPTIONS,
   SEVERITIES,
-  TEAMS,
 } from "@/constants/friction";
 import {
   buildImpactNarrative,
   calculateFrictionScore,
   calculateMonthlyCost,
   calculateMonthlyHours,
+  formatCurrency,
   getRecentReports,
 } from "@/lib/frictionCalculations";
 import { useFrictionStore } from "@/store/frictionStore";
@@ -65,6 +67,9 @@ export function SubmitPage() {
   const setPage = useFrictionStore((s) => s.setPage);
   const reports = useFrictionStore((s) => s.reports);
   const hourlyRate = useFrictionStore((s) => s.hourlyRate);
+  const companySettings = useFrictionStore((s) => s.companySettings);
+  const teamOptions = useMemo(() => getEffectiveTeamOptions(companySettings), [companySettings]);
+  const currencyCode = companySettings.currencyCode;
 
   const titleRef = useRef<HTMLInputElement>(null);
   const descriptionRef = useRef<HTMLTextAreaElement>(null);
@@ -105,13 +110,25 @@ export function SubmitPage() {
     title: "",
     description: "",
     category: FRICTION_CATEGORIES[0] as FrictionCategory,
-    team: TEAMS[0] as Team,
+    team: "Operations" as Team,
     process: "",
     timeLostHours: "",
     frequency: "weekly" as Frequency,
     severity: "medium" as Severity,
     suggestion: "",
   });
+
+  useEffect(() => {
+    setForm((f) => {
+      const nextTeam = teamOptions.includes(f.team)
+        ? f.team
+        : teamOptions.includes(companySettings.defaultTeam)
+          ? companySettings.defaultTeam
+          : teamOptions[0] ?? "Operations";
+      if (nextTeam === f.team) return f;
+      return { ...f, team: nextTeam as Team };
+    });
+  }, [teamOptions, companySettings.defaultTeam]);
 
   const [errors, setErrors] = useState<Partial<Record<FormField, string>>>({});
   const [submitted, setSubmitted] = useState<FrictionReport | null>(null);
@@ -230,7 +247,9 @@ export function SubmitPage() {
       title: "",
       description: "",
       category: FRICTION_CATEGORIES[0] as FrictionCategory,
-      team: TEAMS[0] as Team,
+      team: (teamOptions.includes(companySettings.defaultTeam)
+        ? companySettings.defaultTeam
+        : teamOptions[0] ?? "Operations") as Team,
       process: "",
       timeLostHours: "",
       frequency: "weekly",
@@ -289,7 +308,7 @@ export function SubmitPage() {
               <div>
                 <div style={{ fontSize: 12, color: "var(--ink-mute)" }}>Monthly cost</div>
                 <div style={{ fontSize: 22, fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>
-                  ${submitImpact.monthlyCost.toLocaleString()}
+                  {formatCurrency(submitImpact.monthlyCost, currencyCode)}
                 </div>
               </div>
             </div>
@@ -393,6 +412,7 @@ export function SubmitPage() {
                   value={form.category}
                   onChange={(e) => set("category", e.target.value as FrictionCategory)}
                   aria-invalid={!!errors.category}
+                  aria-describedby={errors.category ? undefined : "fm-category-hint"}
                 >
                   {FRICTION_CATEGORIES.map((c) => (
                     <option key={c} value={c}>
@@ -400,6 +420,9 @@ export function SubmitPage() {
                     </option>
                   ))}
                 </select>
+                <p className="hint" style={{ marginTop: 6 }} id="fm-category-hint">
+                  {FRICTION_CATEGORY_DESCRIPTIONS[form.category]}
+                </p>
                 {errors.category && (
                   <div className="field-error" role="alert">
                     {errors.category}
@@ -416,8 +439,8 @@ export function SubmitPage() {
                   onChange={(e) => set("team", e.target.value as Team)}
                   aria-invalid={!!errors.team}
                 >
-                  {TEAMS.map((t) => (
-                    <option key={t}>
+                  {teamOptions.map((t) => (
+                    <option key={t} value={t}>
                       {t}
                     </option>
                   ))}
@@ -614,7 +637,7 @@ export function SubmitPage() {
                     </div>
                     <div style={{ textAlign: "right" }}>
                       <div style={{ fontSize: 13, fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>
-                        ${Math.round(calculateMonthlyCost(r, hourlyRate)).toLocaleString()}/mo
+                        {formatCurrency(Math.round(calculateMonthlyCost(r, hourlyRate)), currencyCode)}/mo
                       </div>
                       <div style={{ marginTop: 6 }}>
                         <StatusPill status={r.status} />
@@ -666,7 +689,7 @@ export function SubmitPage() {
                   <div>
                     <div style={{ fontSize: 11, color: "var(--ink-mute)" }}>Est. monthly cost</div>
                     <div style={{ fontSize: 20, fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>
-                      ${previewMetrics.monthlyCost.toLocaleString()}
+                      {formatCurrency(previewMetrics.monthlyCost, currencyCode)}
                     </div>
                   </div>
                 </div>

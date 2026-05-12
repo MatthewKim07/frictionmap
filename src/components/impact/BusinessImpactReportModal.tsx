@@ -58,6 +58,7 @@ export function BusinessImpactReportModal() {
   const setOpen = useFrictionStore((s) => s.setImpactReportModalOpen);
   const reports = useFrictionStore((s) => s.reports);
   const hourlyRate = useFrictionStore((s) => s.hourlyRate);
+  const currencyCode = useFrictionStore((s) => s.companySettings.currencyCode);
 
   const [tone, setTone] = useState<BusinessImpactReportTone>("executive");
   const [generatedAt, setGeneratedAt] = useState(() => new Date());
@@ -100,8 +101,9 @@ export function BusinessImpactReportModal() {
       tone,
       hourlyRate,
       generatedAt,
+      currencyCode,
     });
-  }, [reports, tone, hourlyRate, generatedAt]);
+  }, [reports, tone, hourlyRate, generatedAt, currencyCode]);
 
   const close = () => setOpen(false);
 
@@ -187,7 +189,7 @@ export function BusinessImpactReportModal() {
                       {result.stats.reportCount} reports
                     </span>
                     <span className="modal-stat-pill">{formatHours(result.stats.monthlyHoursLost)}/mo</span>
-                    <span className="modal-stat-pill">{formatCurrency(result.stats.monthlyCostLeakage)}/mo</span>
+                    <span className="modal-stat-pill">{formatCurrency(result.stats.monthlyCostLeakage, currencyCode)}/mo</span>
                     <span className="modal-stat-pill">{result.stats.roadmapClusterCount} clusters</span>
                     <span className="modal-stat-pill">{result.stats.openCount} open</span>
                   </div>

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 
 import type { IntegrationSettings, MockTicketPriority } from "@/constants/integrationSettings";
+import { DEFAULT_COMPANY_NAME } from "@/constants/companySettings";
 import { exportFrictionReportsToCsv, exportRoadmapSummaryCsv, frictionReportsCsvTemplate, parseFrictionReportsCsv } from "@/lib/csvFriction";
 import { buildSlackSummaryMessage, buildTrackerTicketMarkdown, buildTrackerTicketPlainForApi } from "@/lib/integrationMocks";
 import { liveCreateJiraIssue, liveCreateLinearIssue, livePostSlackSummary } from "@/lib/integrationsLive";
@@ -104,12 +105,20 @@ function IntegrationCard({
 export function IntegrationsPage() {
   const reports = useFrictionStore((s) => s.reports);
   const hourlyRate = useFrictionStore((s) => s.hourlyRate);
+  const companySettings = useFrictionStore((s) => s.companySettings);
+  const currencyCode = companySettings.currencyCode;
+  const orgTrim = companySettings.companyName.trim();
+  const roadmapRec =
+    orgTrim && orgTrim !== DEFAULT_COMPANY_NAME ? { organizationLabel: orgTrim } : undefined;
   const integrationSettings = useFrictionStore((s) => s.integrationSettings);
   const setIntegrationSettings = useFrictionStore((s) => s.setIntegrationSettings);
   const importReports = useFrictionStore((s) => s.importReports);
   const pulseToast = useFrictionStore((s) => s.pulseToast);
 
-  const roadmap = useMemo(() => generateRoadmapItems(reports, hourlyRate), [reports, hourlyRate]);
+  const roadmap = useMemo(
+    () => generateRoadmapItems(reports, hourlyRate, currencyCode, roadmapRec),
+    [reports, hourlyRate, currencyCode, orgTrim],
+  );
 
   const [slackPreview, setSlackPreview] = useState("");
   const [ticketItemId, setTicketItemId] = useState<string>(() => roadmap[0]?.id ?? "");
@@ -143,30 +152,30 @@ export function IntegrationsPage() {
         setTicketPreview(null);
         return;
       }
-      const jira = buildTrackerTicketMarkdown(item, hourlyRate, integrationSettings, "jira");
-      const linear = buildTrackerTicketMarkdown(item, hourlyRate, integrationSettings, "linear");
+      const jira = buildTrackerTicketMarkdown(item, hourlyRate, integrationSettings, "jira", currencyCode);
+      const linear = buildTrackerTicketMarkdown(item, hourlyRate, integrationSettings, "linear", currencyCode);
       setTicketPreview({
         jira: `# ${jira.title}\n\n**Priority (mock):** ${jira.priority}\n\n${jira.body}`,
         linear: `# ${linear.title}\n\n**Priority (mock):** ${linear.priority}\n\n${linear.body}`,
       });
     },
-    [hourlyRate, integrationSettings],
+    [hourlyRate, integrationSettings, currencyCode],
   );
 
   const onSlackGenerate = () => {
-    const msg = buildSlackSummaryMessage(reports, hourlyRate, integrationSettings);
+    const msg = buildSlackSummaryMessage(reports, hourlyRate, integrationSettings, currencyCode);
     setSlackPreview(msg);
     pulseToast("Slack summary generated — copy when ready.");
   };
 
   const onSlackCopy = async () => {
-    const text = slackPreview || buildSlackSummaryMessage(reports, hourlyRate, integrationSettings);
+    const text = slackPreview || buildSlackSummaryMessage(reports, hourlyRate, integrationSettings, currencyCode);
     const ok = await copyToClipboard(text);
     pulseToast(ok ? "Copied to clipboard." : "Copy failed — select the text and copy manually.");
   };
 
   const onSlackSendLive = async () => {
-    const text = slackPreview || buildSlackSummaryMessage(reports, hourlyRate, integrationSettings);
+    const text = slackPreview || buildSlackSummaryMessage(reports, hourlyRate, integrationSettings, currencyCode);
     setLiveBusy("slack");
     const res = await livePostSlackSummary(text);
     setLiveBusy("idle");
@@ -184,7 +193,7 @@ export function IntegrationsPage() {
       pulseToast("Set Jira project key in Integration settings.");
       return;
     }
-    const { summary, description } = buildTrackerTicketPlainForApi(selectedRoadmap, hourlyRate, integrationSettings, "jira");
+    const { summary, description } = buildTrackerTicketPlainForApi(selectedRoadmap, hourlyRate, integrationSettings, "jira", currencyCode);
     setLiveBusy("jira");
     const res = await liveCreateJiraIssue({
       projectKey: pk,
@@ -208,7 +217,7 @@ export function IntegrationsPage() {
       pulseToast("Set Linear team ID in Integration settings.");
       return;
     }
-    const { summary, description } = buildTrackerTicketPlainForApi(selectedRoadmap, hourlyRate, integrationSettings, "linear");
+    const { summary, description } = buildTrackerTicketPlainForApi(selectedRoadmap, hourlyRate, integrationSettings, "linear", currencyCode);
     setLiveBusy("linear");
     const res = await liveCreateLinearIssue({ teamId, title: summary, description });
     setLiveBusy("idle");

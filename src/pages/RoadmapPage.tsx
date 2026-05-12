@@ -3,6 +3,7 @@ import { useCallback, useMemo, useState } from "react";
 
 import { InsightsMetricCard } from "@/components/dashboard/InsightsMetricCard";
 import { CategoryPill, ImplementationDifficultyPill, RecommendationConfidencePill, RoadmapPriorityPill, SeverityPill, StatusPill } from "@/components/ui/pills";
+import { DEFAULT_COMPANY_NAME } from "@/constants/companySettings";
 import {
   FRICTION_CATEGORIES,
   REPORT_STATUSES,
@@ -112,6 +113,12 @@ function sortRoadmapItems(items: DerivedRoadmapItem[], sortBy: RoadmapSort): Der
 export function RoadmapPage() {
   const reports = useFrictionStore((s) => s.reports);
   const hourlyRate = useFrictionStore((s) => s.hourlyRate);
+  const companySettings = useFrictionStore((s) => s.companySettings);
+  const currencyCode = companySettings.currencyCode;
+  const orgTrim = companySettings.companyName.trim();
+  const roadmapRec =
+    orgTrim && orgTrim !== DEFAULT_COMPANY_NAME ? { organizationLabel: orgTrim } : undefined;
+
   const setPage = useFrictionStore((s) => s.setPage);
   const setClusterReportsStatus = useFrictionStore((s) => s.setClusterReportsStatus);
   const setImpactReportModalOpen = useFrictionStore((s) => s.setImpactReportModalOpen);
@@ -128,7 +135,10 @@ export function RoadmapPage() {
     window.setTimeout(() => setActionNote(null), 3200);
   }, []);
 
-  const allItems = useMemo(() => generateRoadmapItems(reports, hourlyRate), [reports, hourlyRate]);
+  const allItems = useMemo(
+    () => generateRoadmapItems(reports, hourlyRate, currencyCode, roadmapRec),
+    [reports, hourlyRate, currencyCode, orgTrim],
+  );
 
   const topByScore = allItems[0] ?? null;
 
@@ -171,10 +181,10 @@ export function RoadmapPage() {
   };
 
   const topRecLine = topByScore
-    ? `Start with ${topByScore.problemTitle} (${topByScore.process}) to address approximately ${formatCurrency(Math.round(topByScore.monthlyCost))}/month in cost leakage.`
+    ? `Start with ${topByScore.problemTitle} (${topByScore.process}) to address approximately ${formatCurrency(Math.round(topByScore.monthlyCost), currencyCode)}/month in cost leakage.`
     : null;
 
-  const whyFirst = topByScore ? buildWhyRankedFirstExplanation(topByScore) : null;
+  const whyFirst = topByScore ? buildWhyRankedFirstExplanation(topByScore, currencyCode) : null;
 
   if (reports.length === 0) {
     return (
@@ -266,7 +276,7 @@ export function RoadmapPage() {
       >
         <InsightsMetricCard
           label="Potential monthly savings"
-          value={formatCurrency(Math.round(metrics.totalMonthly))}
+          value={formatCurrency(Math.round(metrics.totalMonthly), currencyCode)}
           explanation="Sum of estimated monthly cost leakage in the current list."
           icon="$"
           tone="coral"
@@ -274,7 +284,7 @@ export function RoadmapPage() {
         />
         <InsightsMetricCard
           label="Annualized opportunity"
-          value={formatCurrency(Math.round(metrics.totalAnnual))}
+          value={formatCurrency(Math.round(metrics.totalAnnual), currencyCode)}
           explanation="If these clusters were fully addressed for a year."
           icon="12"
           tone="amber"
@@ -515,7 +525,7 @@ export function RoadmapPage() {
                             fontVariantNumeric: "tabular-nums",
                           }}
                         >
-                          {formatCurrency(Math.round(item.monthlyCost))}
+                          {formatCurrency(Math.round(item.monthlyCost), currencyCode)}
                         </div>
                       </div>
                       <div>
@@ -570,7 +580,7 @@ export function RoadmapPage() {
                             <div>
                               <div style={{ fontSize: 12, color: "var(--ink-mute)" }}>Annualized cost leakage</div>
                               <div style={{ fontSize: 18, fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>
-                                {formatCurrency(Math.round(item.annualCost))}
+                                {formatCurrency(Math.round(item.annualCost), currencyCode)}
                               </div>
                             </div>
                             <div>
@@ -764,7 +774,7 @@ export function RoadmapPage() {
                                           color: "var(--ink-soft)",
                                         }}
                                       >
-                                        {formatCurrency(Math.round(calculateMonthlyCost(r, hourlyRate)))}
+                                        {formatCurrency(Math.round(calculateMonthlyCost(r, hourlyRate)), currencyCode)}
                                       </td>
                                       <td style={{ padding: "10px 0 10px 8px" }}>
                                         <StatusPill status={r.status} />
@@ -820,7 +830,7 @@ export function RoadmapPage() {
                               type="button"
                               className="btn secondary"
                               onClick={async () => {
-                                const ok = await copyToClipboard(formatRoadmapItemCopySummary(item));
+                                const ok = await copyToClipboard(formatRoadmapItemCopySummary(item, currencyCode));
                                 showNote(ok ? "Summary copied to clipboard." : "Could not copy — select and copy manually.");
                               }}
                             >
@@ -830,7 +840,7 @@ export function RoadmapPage() {
                               type="button"
                               className="btn secondary"
                               onClick={() => {
-                                downloadTextFile(`frictionmap-roadmap-${slugFilePart(item.problemTitle)}.txt`, formatRoadmapItemExportText(item, hourlyRate));
+                                downloadTextFile(`frictionmap-roadmap-${slugFilePart(item.problemTitle)}.txt`, formatRoadmapItemExportText(item, hourlyRate, currencyCode));
                                 showNote("Exported roadmap item as text.");
                               }}
                             >
