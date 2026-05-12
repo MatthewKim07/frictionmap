@@ -77,10 +77,6 @@ export function AppShell({ children }: { children: ReactNode }) {
             <button type="button" className="btn-reset-demo" onClick={confirmReset} aria-label="Reset reports to scenario baseline">
               Reset demo
             </button>
-            <span className="header-org">Acme Co.</span>
-            <div className="avatar" aria-hidden>
-              YO
-            </div>
           </div>
         </div>
       </header>
