@@ -13,6 +13,46 @@ import {
 
 export const PROFILES_TABLE = "profiles";
 
+const BOOTSTRAP_WORKSPACE_ADMIN_RPC = "bootstrap_workspace_admin_if_orphaned";
+
+export type BootstrapWorkspaceResult =
+  | { ok: true }
+  | { ok: false; code: string; message: string };
+
+function bootstrapMessageForCode(code: string): string {
+  switch (code) {
+    case "admin_exists":
+      return "This emergency button only runs when no one in public.profiles is an active Administrator or Judge yet. Your project already has at least one — use the steps below instead of demoting everyone.";
+    case "no_profile":
+      return "No profile row for your account. Run docs/supabase-auth-profiles.sql, then sign in again.";
+    case "not_authenticated":
+      return "Sign in again, then retry.";
+    default:
+      return "Could not activate the workspace.";
+  }
+}
+
+/** When no active admin exists, promotes the signed-in user to active admin (see SQL RPC). */
+export async function bootstrapWorkspaceAdminIfOrphaned(supabase: SupabaseClient): Promise<BootstrapWorkspaceResult> {
+  const { data, error } = await supabase.rpc(BOOTSTRAP_WORKSPACE_ADMIN_RPC);
+  if (error) {
+    const msg = error.message ?? "Request failed.";
+    const missingFn =
+      /does not exist/i.test(msg) && (/function/i.test(msg) || /schema cache/i.test(msg));
+    return {
+      ok: false,
+      code: "rpc_error",
+      message: missingFn
+        ? "Run the latest docs/supabase-auth-profiles.sql in the Supabase SQL editor (adds the recovery function), then try again."
+        : msg,
+    };
+  }
+  const payload = data as { ok?: boolean; code?: string } | null;
+  if (payload?.ok === true) return { ok: true };
+  const code = typeof payload?.code === "string" ? payload.code : "unknown";
+  return { ok: false, code, message: bootstrapMessageForCode(code) };
+}
+
 export interface RemoteProfile {
   id: string;
   email: string;

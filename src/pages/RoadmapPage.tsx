@@ -805,7 +805,11 @@ export function RoadmapPage() {
                                   disabled={item.status === st}
                                   onClick={() => {
                                     setClusterReportsStatus(item.category, item.process, st);
-                                    showNote(`Marked cluster as ${STATUS_LABEL[st]}. Related reports updated.`);
+                                    showNote(
+                                      st === "resolved"
+                                        ? `Marked cluster as ${STATUS_LABEL[st]}. Related reports updated — estimates appear under Insights → Resolution Activity.`
+                                        : `Marked cluster as ${STATUS_LABEL[st]}. Related reports updated.`,
+                                    );
                                   }}
                                 >
                                   Mark {STATUS_LABEL[st].toLowerCase()}

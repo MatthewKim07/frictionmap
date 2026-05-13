@@ -2,7 +2,7 @@
 -- Dashboard checklist:
 --   1) Authentication → Providers: enable Email.
 --   2) Authentication → URL configuration: add http://localhost:5173 and your production site to Redirect URLs.
---   3) Run this file in SQL Editor. First user to sign up becomes admin (see handle_new_user).
+--   3) Run this file in SQL Editor. New signups get active administrator on `profiles` (see handle_new_user).
 -- Links each auth.users row to org_role, approval status, and seniority for real RBAC in the app.
 
 create or replace function public.set_updated_at()
@@ -59,7 +59,7 @@ before update on public.profiles
 for each row
 execute function public.set_updated_at();
 
--- First registered user becomes admin; later signups default to employee unless metadata overrides.
+-- New auth users always get admin + active on `profiles`; raw_user_meta_data.requested_role records signup choice (admin vs employee). Legacy org_role metadata is still a fallback for requested_role only.
 create or replace function public.handle_new_user()
 returns trigger
 language plpgsql
@@ -67,24 +67,11 @@ security definer
 set search_path = public
 as $$
 declare
-  is_first boolean;
   requested text;
-  role text;
-  status text;
 begin
-  select not exists (select 1 from public.profiles) into is_first;
-
   requested := coalesce(nullif(new.raw_user_meta_data->>'requested_role', ''), nullif(new.raw_user_meta_data->>'org_role', ''), 'employee');
   if requested not in ('admin', 'employee') then
     requested := 'employee';
-  end if;
-
-  if is_first then
-    role := 'admin';
-    status := 'active';
-  else
-    role := 'employee';
-    status := 'pending';
   end if;
 
   insert into public.profiles (id, email, display_name, org_role, account_status, requested_role, seniority, approved_at)
@@ -92,11 +79,11 @@ begin
     new.id,
     coalesce(new.email, ''),
     coalesce(nullif(new.raw_user_meta_data->>'display_name', ''), split_part(coalesce(new.email, 'user@local'), '@', 1)),
-    role,
-    status,
+    'admin',
+    'active',
     requested,
     coalesce(nullif(new.raw_user_meta_data->>'seniority', ''), 'mid'),
-    case when status = 'active' then now() else null end
+    now()
   )
   on conflict (id) do update set
     email = excluded.email,
@@ -117,24 +104,15 @@ select
   u.id,
   coalesce(u.email, ''),
   coalesce(u.raw_user_meta_data->>'display_name', split_part(coalesce(u.email, 'user@local'), '@', 1)),
-  case
-    when not exists (select 1 from public.profiles p2 where p2.id <> u.id and p2.org_role = 'admin') then 'admin'
-    else 'employee'
-  end,
-  case
-    when not exists (select 1 from public.profiles p2 where p2.id <> u.id and p2.org_role = 'admin') then 'active'
-    else 'pending'
-  end,
+  'admin',
+  'active',
   case
     when coalesce(u.raw_user_meta_data->>'requested_role', u.raw_user_meta_data->>'org_role') in ('admin', 'employee')
       then coalesce(u.raw_user_meta_data->>'requested_role', u.raw_user_meta_data->>'org_role')
     else 'employee'
   end,
   coalesce(nullif(u.raw_user_meta_data->>'seniority', ''), 'mid'),
-  case
-    when not exists (select 1 from public.profiles p2 where p2.id <> u.id and p2.org_role = 'admin') then now()
-    else null
-  end
+  now()
 from auth.users u
 left join public.profiles p on p.id = u.id
 where p.id is null
@@ -184,3 +162,51 @@ create policy "profiles_update_admin_only"
   with check (
     public.current_user_is_profile_admin()
   );
+
+-- Pending users cannot pass RLS to update profiles, so they cannot open Settings to approve themselves.
+-- This RPC runs as security definer: if the workspace has no active admin/judge, the signed-in user becomes one.
+create or replace function public.bootstrap_workspace_admin_if_orphaned()
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  active_admin_count int;
+begin
+  if auth.uid() is null then
+    return jsonb_build_object('ok', false, 'code', 'not_authenticated');
+  end if;
+
+  select count(*)::int into active_admin_count
+  from public.profiles
+  where org_role in ('admin', 'judge')
+    and account_status = 'active';
+
+  if active_admin_count > 0 then
+    return jsonb_build_object('ok', false, 'code', 'admin_exists');
+  end if;
+
+  update public.profiles
+  set
+    org_role = 'admin',
+    account_status = 'active',
+    approved_at = coalesce(approved_at, now())
+  where id = auth.uid();
+
+  if not found then
+    return jsonb_build_object('ok', false, 'code', 'no_profile');
+  end if;
+
+  return jsonb_build_object('ok', true);
+end;
+$$;
+
+revoke all on function public.bootstrap_workspace_admin_if_orphaned() from public;
+grant execute on function public.bootstrap_workspace_admin_if_orphaned() to authenticated;
+
+-- Optional one-time: teammates already stored as employee/pending before this migration.
+-- Uncomment and run in SQL Editor if you want every existing row to be an active admin:
+--
+-- update public.profiles
+-- set org_role = 'admin', account_status = 'active', approved_at = coalesce(approved_at, now());

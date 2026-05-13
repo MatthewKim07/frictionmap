@@ -1,6 +1,7 @@
 import type { FormEvent } from "react";
 import { useEffect, useState } from "react";
 
+import { BrandWordmark } from "@/components/brand/BrandWordmark";
 import { isSupabaseConfigured } from "@/lib/supabase";
 import { useAuthStore, type AuthPanelMode, type AuthResult } from "@/store/authStore";
 import { useFrictionStore } from "@/store/frictionStore";
@@ -122,14 +123,17 @@ export function LoginPanel() {
         <button type="button" className="auth-close" onClick={() => setLoginPanelOpen(false)} aria-label="Close sign-in panel">
           Close
         </button>
+        <div style={{ margin: "4px 0 12px", paddingRight: 72 }}>
+          <BrandWordmark compact />
+        </div>
 
         <div className="auth-panel-head">
           <p className="auth-eyebrow">Workspace access</p>
           <h2 id="auth-panel-title">{mode === "sign-in" ? "Sign in to FrictionMap" : "Create your account"}</h2>
           <p>
             {mode === "sign-in"
-              ? "Use your work email and password. Employee accounts must be approved before the app opens."
-              : "Choose the access you need. The first account becomes the workspace administrator; later employees wait for approval."}
+              ? "Use your work email and password. New accounts may stay pending until an active administrator approves them."
+              : "Choose the access you need. Everyone gets an active administrator account on this workspace (you can still narrow roles later in Settings)."}
           </p>
         </div>
 

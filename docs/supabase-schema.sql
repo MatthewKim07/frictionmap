@@ -16,7 +16,8 @@ create table if not exists public.friction_reports (
   suggestion text,
   status text not null default 'open',
   created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
+  updated_at timestamptz not null default now(),
+  resolved_at timestamptz
 );
 
 create table if not exists public.app_settings (
@@ -27,11 +28,17 @@ create table if not exists public.app_settings (
   updated_at timestamptz not null default now()
 );
 
+-- Optional: when FrictionMap syncs org metadata to Supabase, store the first activity year anchor.
+alter table public.app_settings add column if not exists organization_created_at date;
+
 create index if not exists idx_friction_reports_category on public.friction_reports(category);
 create index if not exists idx_friction_reports_team on public.friction_reports(team);
 create index if not exists idx_friction_reports_status on public.friction_reports(status);
 create index if not exists idx_friction_reports_severity on public.friction_reports(severity);
 create index if not exists idx_friction_reports_created_at on public.friction_reports(created_at desc);
+
+-- Existing projects: add resolution timestamp (safe to re-run).
+alter table public.friction_reports add column if not exists resolved_at timestamptz;
 
 -- Keep updated_at fresh
 create or replace function public.set_updated_at()
