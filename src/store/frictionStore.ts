@@ -70,8 +70,10 @@ export interface NewFrictionPayload {
   process: string;
   timeLostHours: number;
   frequency: FrictionReport["frequency"];
+  frequencyLabel?: string;
   severity: FrictionReport["severity"];
   suggestion: string;
+  attachmentUrl?: string;
 }
 
 function clampPageToRole(page: AppPage, role: SimulationRole): AppPage {

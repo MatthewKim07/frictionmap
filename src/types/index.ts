@@ -38,8 +38,12 @@ export interface FrictionReport {
   process: string;
   timeLostHours: number;
   frequency: Frequency;
+  /** Optional display label overriding the frequency enum (e.g. "every sprint"). */
+  frequencyLabel?: string;
   severity: Severity;
   suggestion: string;
+  /** Optional URL or link the submitter attached for context. */
+  attachmentUrl?: string;
   status: ReportStatus;
   createdAt: string;
   whenLabel?: string;
