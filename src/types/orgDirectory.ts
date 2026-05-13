@@ -1,5 +1,21 @@
 import type { SimulationRole } from "@/constants/companySettings";
 
+export const ACCOUNT_STATUSES = ["pending", "active"] as const;
+export type AccountStatus = (typeof ACCOUNT_STATUSES)[number];
+
+export const ACCOUNT_STATUS_LABELS: Record<AccountStatus, string> = {
+  pending: "Pending access",
+  active: "Active",
+};
+
+export const SIGNUP_ROLES = ["admin", "employee"] as const;
+export type SignupRole = (typeof SIGNUP_ROLES)[number];
+
+export const SIGNUP_ROLE_LABELS: Record<SignupRole, string> = {
+  admin: "Administrator",
+  employee: "Employee",
+};
+
 /** Job ladder — used for labels and future policy (e.g. approvals). */
 export const SENIORITY_LEVELS = [
   "intern",
@@ -40,6 +56,8 @@ export interface DirectoryUser {
   email: string;
   seniority: SeniorityLevel;
   orgRole: SimulationRole;
+  accountStatus: AccountStatus;
+  requestedRole: SignupRole;
   /** Which sign-in experiences are enabled for this profile. */
   authMethods: AuthMethodKind[];
   /**
@@ -49,4 +67,6 @@ export interface DirectoryUser {
   passwordPlain?: string;
   /** Optional hint for SSO simulation (e.g. corp subject id). */
   ssoSubject?: string;
+  /** Internal sample account used only for legacy local data repair. */
+  isSeedUser?: boolean;
 }

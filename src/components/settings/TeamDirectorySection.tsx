@@ -5,10 +5,13 @@ import { useFrictionStore } from "@/store/frictionStore";
 import type { NewDirectoryUserInput } from "@/store/authStore";
 import { useAuthStore } from "@/store/authStore";
 import {
+  ACCOUNT_STATUS_LABELS,
   AUTH_METHOD_KINDS,
   AUTH_METHOD_LABELS,
   SENIORITY_LABELS,
   SENIORITY_LEVELS,
+  SIGNUP_ROLE_LABELS,
+  type AccountStatus,
   type AuthMethodKind,
   type DirectoryUser,
   type SeniorityLevel,
@@ -19,6 +22,7 @@ const emptyForm = {
   email: "",
   seniority: "mid" as SeniorityLevel,
   orgRole: "employee" as SimulationRole,
+  accountStatus: "active" as AccountStatus,
   passwordPlain: "demo",
   authMethods: ["password", "magic_link"] as AuthMethodKind[],
 };
@@ -50,6 +54,8 @@ export function TeamDirectorySection() {
       email: form.email,
       seniority: form.seniority,
       orgRole: form.orgRole,
+      accountStatus: form.accountStatus,
+      requestedRole: form.orgRole === "admin" ? "admin" : "employee",
       authMethods: form.authMethods,
       passwordPlain: form.passwordPlain || undefined,
     });
@@ -66,7 +72,7 @@ export function TeamDirectorySection() {
     <section className="card" style={{ padding: "20px 22px", gridColumn: "1 / -1" }}>
       <h2 style={{ fontSize: 17, marginBottom: 10 }}>Team directory</h2>
       <p style={{ margin: "0 0 16px", fontSize: 13, color: "var(--ink-mute)", lineHeight: 1.55 }}>
-        Add people, set <strong>seniority</strong> (job ladder), and assign <strong>organization roles</strong> (what they can open in FrictionMap). Sign-in methods are simulated locally — swap in Supabase Auth for production.
+        Add people, approve access, and assign the roles that control what each person can open.
       </p>
 
       <div
@@ -130,7 +136,7 @@ export function TeamDirectorySection() {
           </select>
         </div>
         <div className="field" style={{ margin: 0 }}>
-          <label htmlFor="td-pass">Demo password (optional)</label>
+          <label htmlFor="td-pass">Temporary password (optional)</label>
           <input
             id="td-pass"
             className="input"
@@ -179,6 +185,9 @@ export function TeamDirectorySection() {
               </th>
               <th scope="col" style={{ padding: "8px", color: "var(--ink-mute)", fontWeight: 600 }}>
                 Role
+              </th>
+              <th scope="col" style={{ padding: "8px", color: "var(--ink-mute)", fontWeight: 600 }}>
+                Access
               </th>
               <th scope="col" style={{ padding: "8px 0 8px 8px", color: "var(--ink-mute)", fontWeight: 600 }}>
                 Actions
@@ -242,6 +251,7 @@ function DirectoryRow({
     email: user.email,
     seniority: user.seniority,
     orgRole: user.orgRole,
+    accountStatus: user.accountStatus,
     passwordPlain: user.passwordPlain ?? "",
     authMethods: [...user.authMethods] as AuthMethodKind[],
   });
@@ -253,6 +263,7 @@ function DirectoryRow({
         email: user.email,
         seniority: user.seniority,
         orgRole: user.orgRole,
+        accountStatus: user.accountStatus,
         passwordPlain: user.passwordPlain ?? "",
         authMethods: [...user.authMethods] as AuthMethodKind[],
       });
@@ -266,6 +277,16 @@ function DirectoryRow({
         <td style={{ padding: "10px 8px", color: "var(--ink-soft)" }}>{user.email}</td>
         <td style={{ padding: "10px 8px" }}>{SENIORITY_LABELS[user.seniority]}</td>
         <td style={{ padding: "10px 8px" }}>{SIMULATION_ROLE_LABELS[user.orgRole]}</td>
+        <td style={{ padding: "10px 8px" }}>
+          <span className={`pill ${user.accountStatus === "pending" ? "amber" : "lime"}`}>
+            {ACCOUNT_STATUS_LABELS[user.accountStatus]}
+          </span>
+          {user.accountStatus === "pending" ? (
+            <span style={{ display: "block", marginTop: 4, color: "var(--ink-mute)", fontSize: 12 }}>
+              Requested {SIGNUP_ROLE_LABELS[user.requestedRole]}
+            </span>
+          ) : null}
+        </td>
         <td style={{ padding: "10px 0 10px 8px", whiteSpace: "nowrap" }}>
           <button type="button" className="btn secondary" style={{ padding: "4px 10px", fontSize: 12, marginRight: 6 }} onClick={onEdit}>
             Edit
@@ -280,7 +301,7 @@ function DirectoryRow({
 
   return (
     <tr style={{ borderBottom: "1px solid var(--rule)", verticalAlign: "top" }}>
-      <td colSpan={5} style={{ padding: "12px 0" }}>
+      <td colSpan={6} style={{ padding: "12px 0" }}>
         <div
           style={{
             display: "grid",
@@ -339,7 +360,19 @@ function DirectoryRow({
             </select>
           </div>
           <div className="field" style={{ margin: 0 }}>
-            <label htmlFor={`e-pass-${user.id}`}>Demo password</label>
+            <label htmlFor={`e-status-${user.id}`}>Access status</label>
+            <select
+              id={`e-status-${user.id}`}
+              className="select"
+              value={draft.accountStatus}
+              onChange={(e) => setDraft((d) => ({ ...d, accountStatus: e.target.value as AccountStatus }))}
+            >
+              <option value="pending">{ACCOUNT_STATUS_LABELS.pending}</option>
+              <option value="active">{ACCOUNT_STATUS_LABELS.active}</option>
+            </select>
+          </div>
+          <div className="field" style={{ margin: 0 }}>
+            <label htmlFor={`e-pass-${user.id}`}>Temporary password</label>
             <input
               id={`e-pass-${user.id}`}
               className="input"
@@ -372,6 +405,8 @@ function DirectoryRow({
                   email: draft.email,
                   seniority: draft.seniority,
                   orgRole: draft.orgRole,
+                  accountStatus: draft.accountStatus,
+                  requestedRole: draft.orgRole === "admin" ? "admin" : user.requestedRole,
                   authMethods: draft.authMethods,
                   passwordPlain: draft.passwordPlain,
                 })

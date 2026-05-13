@@ -5,7 +5,13 @@ import type { SimulationRole } from "@/constants/companySettings";
 import { sanitizeSimulationRole } from "@/constants/companySettings";
 import { getSupabaseClient } from "@/lib/supabase";
 import { fetchProfileForUser, type RemoteProfile } from "@/lib/supabaseProfile";
-import type { AuthMethodKind, DirectoryUser, SeniorityLevel } from "@/types/orgDirectory";
+import type {
+  AccountStatus,
+  AuthMethodKind,
+  DirectoryUser,
+  SeniorityLevel,
+  SignupRole,
+} from "@/types/orgDirectory";
 
 const AUTH_STORAGE_KEY = "frictionmap-auth-v1";
 const AUTH_PERSIST_VERSION = 1;
@@ -29,9 +35,12 @@ function seedDirectory(): DirectoryUser[] {
       email: "alex@company.local",
       seniority: "director",
       orgRole: "admin",
+      accountStatus: "active",
+      requestedRole: "admin",
       authMethods: ["password", "magic_link", "sso"],
       passwordPlain: "demo",
       ssoSubject: "alex@company.local",
+      isSeedUser: true,
     },
     {
       id: newUserId(),
@@ -39,8 +48,11 @@ function seedDirectory(): DirectoryUser[] {
       email: "jordan@company.local",
       seniority: "senior",
       orgRole: "manager",
+      accountStatus: "active",
+      requestedRole: "employee",
       authMethods: ["password", "magic_link"],
       passwordPlain: "demo",
+      isSeedUser: true,
     },
     {
       id: newUserId(),
@@ -48,8 +60,11 @@ function seedDirectory(): DirectoryUser[] {
       email: "sam@company.local",
       seniority: "mid",
       orgRole: "employee",
+      accountStatus: "active",
+      requestedRole: "employee",
       authMethods: ["password", "magic_link", "sso"],
       passwordPlain: "demo",
+      isSeedUser: true,
     },
   ];
 }
@@ -59,10 +74,23 @@ export interface NewDirectoryUserInput {
   email: string;
   seniority: SeniorityLevel;
   orgRole: SimulationRole;
+  accountStatus?: AccountStatus;
+  requestedRole?: SignupRole;
   authMethods: AuthMethodKind[];
   passwordPlain?: string;
   ssoSubject?: string;
 }
+
+export interface SignUpInput {
+  displayName: string;
+  email: string;
+  password: string;
+  requestedRole: SignupRole;
+}
+
+export type AuthPanelMode = "sign-in" | "sign-up";
+
+export type AuthResult = { ok: true; accountStatus: AccountStatus } | { ok: false; message: string };
 
 function remoteProfileToDirectoryUser(p: RemoteProfile): DirectoryUser {
   return {
@@ -71,6 +99,8 @@ function remoteProfileToDirectoryUser(p: RemoteProfile): DirectoryUser {
     email: p.email,
     seniority: p.seniority,
     orgRole: p.orgRole,
+    accountStatus: p.accountStatus,
+    requestedRole: p.requestedRole,
     authMethods: ["password"],
   };
 }
@@ -79,26 +109,23 @@ export interface AuthStoreState {
   directoryUsers: DirectoryUser[];
   sessionUserId: string | null;
   loginPanelOpen: boolean;
+  authPanelMode: AuthPanelMode;
   remoteProfile: RemoteProfile | null;
 
-  setLoginPanelOpen: (open: boolean) => void;
+  setLoginPanelOpen: (open: boolean, mode?: AuthPanelMode) => void;
   setRemoteProfile: (profile: RemoteProfile | null) => void;
   signOut: () => void;
 
-  signInWithPassword: (email: string, password: string) => { ok: true } | { ok: false; message: string };
-  signInWithMagicLink: (email: string) => { ok: true } | { ok: false; message: string };
-  signInWithSso: (userId: string) => { ok: true } | { ok: false; message: string };
+  signInWithPassword: (email: string, password: string) => AuthResult;
+  signUpWithPassword: (input: SignUpInput) => AuthResult;
+  signInWithMagicLink: (email: string) => AuthResult;
+  signInWithSso: (userId: string) => AuthResult;
 
   signInWithSupabasePassword: (
     email: string,
     password: string,
-  ) => Promise<{ ok: true } | { ok: false; message: string }>;
-  requestSupabaseEmailOtp: (email: string) => Promise<{ ok: true } | { ok: false; message: string }>;
-  verifySupabaseEmailOtp: (
-    email: string,
-    token: string,
-  ) => Promise<{ ok: true } | { ok: false; message: string }>;
-  signInWithGoogleOAuth: () => Promise<{ ok: true } | { ok: false; message: string }>;
+  ) => Promise<AuthResult>;
+  signUpWithSupabasePassword: (input: SignUpInput) => Promise<AuthResult>;
 
   addDirectoryUser: (input: NewDirectoryUserInput) => DirectoryUser | { error: string };
   updateDirectoryUser: (id: string, patch: Partial<NewDirectoryUserInput>) => { ok: true } | { error: string };
@@ -106,7 +133,33 @@ export interface AuthStoreState {
 }
 
 function countAdmins(users: DirectoryUser[]): number {
-  return users.filter((u) => u.orgRole === "admin").length;
+  return users.filter((u) => u.orgRole === "admin" && u.accountStatus === "active").length;
+}
+
+function normalizeDirectoryUser(user: DirectoryUser): DirectoryUser {
+  return {
+    ...user,
+    isSeedUser:
+      user.isSeedUser === true ||
+      ["alex@company.local", "jordan@company.local", "sam@company.local"].includes(normalizeAuthEmail(user.email)),
+    accountStatus: user.accountStatus === "pending" || user.accountStatus === "active" ? user.accountStatus : "active",
+    requestedRole: user.requestedRole === "admin" || user.requestedRole === "employee"
+      ? user.requestedRole
+      : user.orgRole === "admin"
+        ? "admin"
+        : "employee",
+  };
+}
+
+function normalizeDisplayName(raw: string): string {
+  return raw.trim().replace(/\s+/g, " ");
+}
+
+function nextSelfSignupAccess(users: DirectoryUser[], requestedRole: SignupRole): Pick<DirectoryUser, "orgRole" | "accountStatus"> {
+  const realActiveAdmins = users.filter((u) => !u.isSeedUser && u.orgRole === "admin" && u.accountStatus === "active").length;
+  if (realActiveAdmins === 0) return { orgRole: "admin", accountStatus: "active" };
+  if (requestedRole === "admin") return { orgRole: "employee", accountStatus: "pending" };
+  return { orgRole: "employee", accountStatus: "pending" };
 }
 
 export const useAuthStore = create<AuthStoreState>()(
@@ -115,9 +168,10 @@ export const useAuthStore = create<AuthStoreState>()(
       directoryUsers: seedDirectory(),
       sessionUserId: null,
       loginPanelOpen: false,
+      authPanelMode: "sign-in",
       remoteProfile: null,
 
-      setLoginPanelOpen: (open) => set({ loginPanelOpen: open }),
+      setLoginPanelOpen: (open, mode) => set({ loginPanelOpen: open, authPanelMode: mode ?? get().authPanelMode }),
 
       setRemoteProfile: (profile) => set({ remoteProfile: profile }),
 
@@ -133,10 +187,39 @@ export const useAuthStore = create<AuthStoreState>()(
         const u = get().directoryUsers.find((x) => normalizeAuthEmail(x.email) === e);
         if (!u) return { ok: false, message: "No teammate found with that email." };
         if (!u.authMethods.includes("password")) return { ok: false, message: "Password sign-in is not enabled for this profile." };
-        if (!u.passwordPlain) return { ok: false, message: "No password is set for this profile — use magic link or SSO, or ask an admin to add one in Team directory." };
+        if (!u.passwordPlain) return { ok: false, message: "No password is set for this profile — ask an admin to add one in Team directory." };
         if (u.passwordPlain !== password) return { ok: false, message: "Incorrect password." };
         set({ sessionUserId: u.id, loginPanelOpen: false });
-        return { ok: true };
+        return { ok: true, accountStatus: u.accountStatus };
+      },
+
+      signUpWithPassword: (input) => {
+        void getSupabaseClient()?.auth.signOut();
+        set({ remoteProfile: null });
+        const displayName = normalizeDisplayName(input.displayName);
+        const email = normalizeAuthEmail(input.email);
+        const password = input.password.trim();
+        if (!displayName || displayName.length > 80) return { ok: false, message: "Enter your name (max 80 characters)." };
+        if (!email || !email.includes("@")) return { ok: false, message: "Enter a valid work email." };
+        if (password.length < 6) return { ok: false, message: "Use a password with at least 6 characters." };
+        if (get().directoryUsers.some((x) => normalizeAuthEmail(x.email) === email)) {
+          return { ok: false, message: "An account already exists for that email." };
+        }
+
+        const access = nextSelfSignupAccess(get().directoryUsers, input.requestedRole);
+        const user: DirectoryUser = {
+          id: newUserId(),
+          displayName,
+          email,
+          seniority: "mid",
+          orgRole: access.orgRole,
+          accountStatus: access.accountStatus,
+          requestedRole: input.requestedRole,
+          authMethods: ["password"],
+          passwordPlain: password,
+        };
+        set((s) => ({ directoryUsers: [...s.directoryUsers, user], sessionUserId: user.id, loginPanelOpen: false }));
+        return { ok: true, accountStatus: user.accountStatus };
       },
 
       signInWithMagicLink: (email) => {
@@ -147,7 +230,7 @@ export const useAuthStore = create<AuthStoreState>()(
         if (!u) return { ok: false, message: "No teammate found with that email." };
         if (!u.authMethods.includes("magic_link")) return { ok: false, message: "Magic link is not enabled for this profile." };
         set({ sessionUserId: u.id, loginPanelOpen: false });
-        return { ok: true };
+        return { ok: true, accountStatus: u.accountStatus };
       },
 
       signInWithSso: (userId) => {
@@ -157,7 +240,7 @@ export const useAuthStore = create<AuthStoreState>()(
         if (!u) return { ok: false, message: "Invalid SSO selection." };
         if (!u.authMethods.includes("sso")) return { ok: false, message: "SSO is not enabled for this profile." };
         set({ sessionUserId: u.id, loginPanelOpen: false });
-        return { ok: true };
+        return { ok: true, accountStatus: u.accountStatus };
       },
 
       signInWithSupabasePassword: async (email, password) => {
@@ -178,59 +261,53 @@ export const useAuthStore = create<AuthStoreState>()(
           };
         }
         set({ remoteProfile: prof, loginPanelOpen: false });
-        return { ok: true };
+        return { ok: true, accountStatus: prof.accountStatus };
       },
 
-      requestSupabaseEmailOtp: async (email) => {
+      signUpWithSupabasePassword: async (input) => {
         const sb = getSupabaseClient();
-        if (!sb) return { ok: false, message: "Supabase is not configured." };
-        const { error } = await sb.auth.signInWithOtp({
-          email: normalizeAuthEmail(email),
-          options: { shouldCreateUser: false },
+        if (!sb) return { ok: false, message: "Supabase is not configured (missing VITE_SUPABASE_URL / ANON_KEY)." };
+        const displayName = normalizeDisplayName(input.displayName);
+        const email = normalizeAuthEmail(input.email);
+        const password = input.password.trim();
+        if (!displayName || displayName.length > 80) return { ok: false, message: "Enter your name (max 80 characters)." };
+        if (!email || !email.includes("@")) return { ok: false, message: "Enter a valid work email." };
+        if (password.length < 6) return { ok: false, message: "Use a password with at least 6 characters." };
+        set({ sessionUserId: null, remoteProfile: null });
+        const { data, error } = await sb.auth.signUp({
+          email,
+          password,
+          options: {
+            data: {
+              display_name: displayName,
+              requested_role: input.requestedRole,
+              org_role: input.requestedRole,
+            },
+          },
         });
         if (error) return { ok: false, message: error.message };
-        return { ok: true };
-      },
-
-      verifySupabaseEmailOtp: async (email, token) => {
-        const sb = getSupabaseClient();
-        if (!sb) return { ok: false, message: "Supabase is not configured." };
-        set({ sessionUserId: null });
-        const { data, error } = await sb.auth.verifyOtp({
-          email: normalizeAuthEmail(email),
-          token: token.replace(/\s/g, ""),
-          type: "email",
-        });
-        if (error) return { ok: false, message: error.message };
-        const user = data.user;
-        if (!user) return { ok: false, message: "No user returned from OTP." };
-        const prof = await fetchProfileForUser(sb, user.id, user.email ?? email);
+        if (!data.session || !data.user) {
+          set({ loginPanelOpen: false });
+          return {
+            ok: false,
+            message: "Account created. Confirm your email if Supabase requires it, then sign in.",
+          };
+        }
+        const prof = await fetchProfileForUser(sb, data.user.id, data.user.email ?? email);
         if (!prof) {
           await sb.auth.signOut();
           return {
             ok: false,
             message:
-              "No profile row for this account. Run docs/supabase-auth-profiles.sql in the Supabase SQL editor, then try again.",
+              "Account created, but no profile row was found. Run docs/supabase-auth-profiles.sql in Supabase, then sign in.",
           };
         }
         set({ remoteProfile: prof, loginPanelOpen: false });
-        return { ok: true };
-      },
-
-      signInWithGoogleOAuth: async () => {
-        const sb = getSupabaseClient();
-        if (!sb) return { ok: false, message: "Supabase is not configured." };
-        const redirectTo = typeof window !== "undefined" ? `${window.location.origin}${window.location.pathname}` : undefined;
-        const { error } = await sb.auth.signInWithOAuth({
-          provider: "google",
-          options: { redirectTo },
-        });
-        if (error) return { ok: false, message: error.message };
-        return { ok: true };
+        return { ok: true, accountStatus: prof.accountStatus };
       },
 
       addDirectoryUser: (input) => {
-        const displayName = input.displayName.trim().replace(/\s+/g, " ");
+        const displayName = normalizeDisplayName(input.displayName);
         const email = normalizeAuthEmail(input.email);
         if (!displayName || displayName.length > 80) return { error: "Enter a display name (max 80 characters)." };
         if (!email || !email.includes("@")) return { error: "Enter a valid email." };
@@ -243,6 +320,8 @@ export const useAuthStore = create<AuthStoreState>()(
           email,
           seniority: input.seniority,
           orgRole: sanitizeSimulationRole(input.orgRole),
+          accountStatus: input.accountStatus ?? "active",
+          requestedRole: input.requestedRole ?? (input.orgRole === "admin" ? "admin" : "employee"),
           authMethods: input.authMethods.length > 0 ? [...input.authMethods] : ["password"],
           passwordPlain: input.passwordPlain?.trim() || undefined,
           ssoSubject: input.ssoSubject?.trim() || undefined,
@@ -272,6 +351,8 @@ export const useAuthStore = create<AuthStoreState>()(
                 email: nextEmail,
                 seniority: patch.seniority ?? u.seniority,
                 orgRole: nextRole,
+                accountStatus: patch.accountStatus ?? u.accountStatus,
+                requestedRole: patch.requestedRole ?? u.requestedRole,
                 authMethods: patch.authMethods !== undefined ? [...patch.authMethods] : u.authMethods,
                 passwordPlain: patch.passwordPlain !== undefined ? patch.passwordPlain.trim() || undefined : u.passwordPlain,
                 ssoSubject: patch.ssoSubject !== undefined ? patch.ssoSubject.trim() || undefined : u.ssoSubject,
@@ -310,7 +391,10 @@ export const useAuthStore = create<AuthStoreState>()(
       merge: (persisted, current) => {
         if (!persisted || typeof persisted !== "object") return { ...current };
         const p = persisted as Partial<AuthStoreState>;
-        const directoryUsers = Array.isArray(p.directoryUsers) && p.directoryUsers.length > 0 ? p.directoryUsers : current.directoryUsers;
+        const directoryUsers =
+          Array.isArray(p.directoryUsers) && p.directoryUsers.length > 0
+            ? (p.directoryUsers as DirectoryUser[]).map(normalizeDirectoryUser)
+            : current.directoryUsers;
         const sessionUserId =
           typeof p.sessionUserId === "string" && directoryUsers.some((u) => u.id === p.sessionUserId)
             ? p.sessionUserId

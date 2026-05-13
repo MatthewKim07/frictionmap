@@ -4,34 +4,23 @@ import { FRICTION_CATEGORY_DESCRIPTIONS } from "@/constants/categoryDescriptions
 import { APP_CURRENCIES, type AppCurrencyCode } from "@/constants/currency";
 import {
   DEFAULT_COMPANY_NAME,
-  SIMULATION_ROLE_LABELS,
-  SIMULATION_ROLES,
   getEffectiveTeamOptions,
-  type SimulationRole,
 } from "@/constants/companySettings";
 import { FRICTION_CATEGORIES, MAX_HOURLY_RATE, MIN_HOURLY_RATE, TEAMS } from "@/constants/friction";
-import { DEMO_SCENARIO_IDS, DEMO_SCENARIO_LABELS, type DemoScenarioId } from "@/data/demoScenarioTypes";
 import { RemoteTeamDirectorySection } from "@/components/settings/RemoteTeamDirectorySection";
 import { TeamDirectorySection } from "@/components/settings/TeamDirectorySection";
 import { canAccessSettingsTab } from "@/lib/roleAccess";
-import { useEffectiveOrgRole, useSessionUser } from "@/hooks/useEffectiveOrgRole";
+import { useEffectiveOrgRole } from "@/hooks/useEffectiveOrgRole";
 import { isSupabaseConfigured } from "@/lib/supabase";
 import { useFrictionStore } from "@/store/frictionStore";
 
 export function SettingsPage() {
   const companySettings = useFrictionStore((s) => s.companySettings);
   const setCompanySettings = useFrictionStore((s) => s.setCompanySettings);
-  const setSimulationRole = useFrictionStore((s) => s.setSimulationRole);
   const hourlyRate = useFrictionStore((s) => s.hourlyRate);
   const setHourlyRate = useFrictionStore((s) => s.setHourlyRate);
-  const demoScenarioId = useFrictionStore((s) => s.demoScenarioId);
-  const loadDemoScenario = useFrictionStore((s) => s.loadDemoScenario);
-  const resetDemoData = useFrictionStore((s) => s.resetDemoData);
-  const dataConnectionMode = useFrictionStore((s) => s.dataConnectionMode);
-  const clearAllLocalData = useFrictionStore((s) => s.clearAllLocalData);
 
   const effectiveRole = useEffectiveOrgRole();
-  const sessionUser = useSessionUser();
 
   const [companyDraft, setCompanyDraft] = useState(companySettings.companyName);
   const [rateDraft, setRateDraft] = useState(String(hourlyRate));
@@ -51,24 +40,15 @@ export function SettingsPage() {
     return (
       <div className="fade-in">
         <h1>Settings</h1>
-        <p className="subtitle">This area is restricted to administrators on this device.</p>
+        <p className="subtitle">This area is restricted to administrators.</p>
         <div className="card" style={{ maxWidth: 520, marginTop: 24, padding: "22px 24px" }}>
           <p style={{ margin: 0, color: "var(--ink-soft)", lineHeight: 1.6, fontSize: 15 }}>
-            FrictionMap does not use accounts here — organization access is stored in this browser. Ask whoever manages
-            FrictionMap to open <strong>Settings</strong> using the <strong>Administrator</strong> or <strong>Judge Demo</strong> role, then assign your device to Employee, Manager, or Operations Leader as appropriate.
+            Ask a workspace administrator to update organization settings or adjust your role in Team Directory.
           </p>
         </div>
       </div>
     );
   }
-
-  const supabaseOn = isSupabaseConfigured();
-  const dataModeLabel =
-    dataConnectionMode === "supabase-connected"
-      ? "Supabase connected — reports sync to your project when configured."
-      : dataConnectionMode === "offline-fallback"
-        ? "Offline fallback — using local demo data."
-        : "Local demo mode — data stays in this browser unless you connect Supabase.";
 
   const commitCompanyName = () => {
     setCompanySettings({ companyName: companyDraft });
@@ -77,17 +57,6 @@ export function SettingsPage() {
   const commitRate = () => {
     const n = Number(rateDraft.replace(/,/g, "").trim());
     setHourlyRate(Number.isFinite(n) ? n : hourlyRate);
-  };
-
-  const scenarioChange = (next: DemoScenarioId) => {
-    if (next === demoScenarioId) return;
-    if (
-      window.confirm(
-        `Load “${DEMO_SCENARIO_LABELS[next]}”? This replaces all reports with pre-built demo friction data.`,
-      )
-    ) {
-      loadDemoScenario(next);
-    }
   };
 
   const addCustomTeam = () => {
@@ -127,8 +96,7 @@ export function SettingsPage() {
     <div className="fade-in">
       <h1>Settings</h1>
       <p className="subtitle">
-        Configure FrictionMap for your organization. Everything here is stored in this browser unless you use Supabase
-        for reports.
+        Configure FrictionMap for your organization.
       </p>
 
       <div
@@ -204,24 +172,12 @@ export function SettingsPage() {
         </section>
 
         <section className="card" style={{ padding: "20px 22px" }}>
-          <h2 style={{ fontSize: 17, marginBottom: 10 }}>Demo &amp; data</h2>
-          <div className="field">
-            <label htmlFor="settings-scenario">Demo scenario</label>
-            <select
-              id="settings-scenario"
-              className="select"
-              value={demoScenarioId}
-              onChange={(e) => scenarioChange(e.target.value as DemoScenarioId)}
-            >
-              {DEMO_SCENARIO_IDS.map((id) => (
-                <option key={id} value={id}>
-                  {DEMO_SCENARIO_LABELS[id]}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="field" style={{ marginTop: 14 }}>
-            <label htmlFor="settings-default-team">Default team (for new reports)</label>
+          <h2 style={{ fontSize: 17, marginBottom: 10 }}>Teams</h2>
+          <p style={{ margin: "0 0 12px", fontSize: 13, color: "var(--ink-mute)", lineHeight: 1.5 }}>
+            Choose the teams employees can select when they report friction.
+          </p>
+          <div className="field" style={{ marginBottom: 14 }}>
+            <label htmlFor="settings-default-team">Default team for new reports</label>
             <select
               id="settings-default-team"
               className="select"
@@ -235,42 +191,6 @@ export function SettingsPage() {
               ))}
             </select>
           </div>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginTop: 16 }}>
-            <button type="button" className="btn secondary" onClick={() => resetDemoData()}>
-              Reset demo data
-            </button>
-            <button
-              type="button"
-              className="btn secondary"
-              onClick={() => {
-                if (
-                  window.confirm(
-                    "Clear all locally stored FrictionMap data and reset to the default Operations demo? This cannot be undone.",
-                  )
-                ) {
-                  clearAllLocalData();
-                }
-              }}
-            >
-              Clear all local data
-            </button>
-          </div>
-        </section>
-
-        <section className="card" style={{ padding: "20px 22px" }}>
-          <h2 style={{ fontSize: 17, marginBottom: 10 }}>Data connection</h2>
-          <p style={{ margin: 0, fontSize: 14, color: "var(--ink-soft)", lineHeight: 1.55 }}>{dataModeLabel}</p>
-          <p className="hint" style={{ marginTop: 10 }}>
-            Supabase env: {supabaseOn ? "configured (anon client available)." : "not configured — demo mode only."}
-          </p>
-        </section>
-
-        <section className="card" style={{ padding: "20px 22px" }}>
-          <h2 style={{ fontSize: 17, marginBottom: 10 }}>Teams</h2>
-          <p style={{ margin: "0 0 12px", fontSize: 13, color: "var(--ink-mute)", lineHeight: 1.5 }}>
-            Hide built-in demo teams you do not need, and add labels that match your org. The report form uses this
-            list.
-          </p>
           <ul style={{ listStyle: "none", padding: 0, margin: "0 0 14px" }}>
             {(TEAMS as readonly string[]).map((t) => (
               <li
@@ -349,35 +269,6 @@ export function SettingsPage() {
         </section>
 
         {isSupabaseConfigured() ? <RemoteTeamDirectorySection /> : <TeamDirectorySection />}
-
-        <section className="card" style={{ padding: "20px 22px" }}>
-          <h2 style={{ fontSize: 17, marginBottom: 10 }}>Organization access</h2>
-          {sessionUser ? (
-            <p style={{ margin: "0 0 12px", fontSize: 13, color: "var(--ink-mute)", lineHeight: 1.5 }}>
-              Signed in as <strong>{sessionUser.displayName}</strong> — tabs and permissions follow their{" "}
-              <strong>organization role</strong> in Team directory. Use <strong>Sign out</strong> in the header to fall back to the device role below.
-            </p>
-          ) : (
-            <p style={{ margin: "0 0 12px", fontSize: 13, color: "var(--ink-mute)", lineHeight: 1.5 }}>
-              When nobody is signed in, this dropdown sets the <strong>device role</strong> for this browser. After sign-in, each person&apos;s access comes from Team directory until they sign out.
-            </p>
-          )}
-          <div className="field">
-            <label htmlFor="settings-role">Role for this browser</label>
-            <select
-              id="settings-role"
-              className="select"
-              value={companySettings.simulationRole}
-              onChange={(e) => setSimulationRole(e.target.value as SimulationRole)}
-            >
-              {SIMULATION_ROLES.map((r) => (
-                <option key={r} value={r}>
-                  {SIMULATION_ROLE_LABELS[r]}
-                </option>
-              ))}
-            </select>
-          </div>
-        </section>
 
         <section className="card" style={{ padding: "20px 22px", gridColumn: "1 / -1" }}>
           <h2 style={{ fontSize: 17, marginBottom: 10 }}>How to roll this out</h2>

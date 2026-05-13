@@ -1,7 +1,6 @@
 import { motion } from "framer-motion";
 import { useMemo } from "react";
 
-import { DemoControlsPanel } from "@/components/demo/DemoControlsPanel";
 import { DEFAULT_COMPANY_NAME } from "@/constants/companySettings";
 import { BarRow } from "@/components/dashboard/BarRow";
 import { InsightsMetricCard } from "@/components/dashboard/InsightsMetricCard";
@@ -19,7 +18,6 @@ import {
 import { categoryColorHex } from "@/lib/categoryMeta";
 import {
   canOpenBusinessImpactReport,
-  canShowOverviewDemoToolbar,
   roleMayAccessPage,
 } from "@/lib/roleAccess";
 import { useEffectiveOrgRole } from "@/hooks/useEffectiveOrgRole";
@@ -52,8 +50,6 @@ export function OverviewPage() {
   const mayRoadmap = roleMayAccessPage(simulationRole, "roadmap");
   const mayInsights = roleMayAccessPage(simulationRole, "insights");
   const mayImpactReport = canOpenBusinessImpactReport(simulationRole);
-  const showDemoToolbar = canShowOverviewDemoToolbar(simulationRole);
-
   const topCategoryLabel = metrics.topCategory ?? "—";
   const topCategorySub = metrics.topCategory
     ? `${formatHours(metrics.topCategoryMonthlyHours)} · ${formatCurrency(Math.round(metrics.topCategoryMonthlyHours * hourlyRate), currencyCode)}/mo`
@@ -66,8 +62,6 @@ export function OverviewPage() {
 
   return (
     <div className="fade-in">
-      {showDemoToolbar ? <DemoControlsPanel /> : null}
-
       <motion.section
         aria-labelledby="overview-hero-heading"
         initial={{ opacity: 0, y: 8 }}
