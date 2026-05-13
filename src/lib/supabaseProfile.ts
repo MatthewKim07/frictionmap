@@ -2,7 +2,14 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { SimulationRole } from "@/constants/companySettings";
 import { sanitizeSimulationRole } from "@/constants/companySettings";
-import { SENIORITY_LEVELS, type SeniorityLevel } from "@/types/orgDirectory";
+import {
+  ACCOUNT_STATUSES,
+  SIGNUP_ROLES,
+  SENIORITY_LEVELS,
+  type AccountStatus,
+  type SeniorityLevel,
+  type SignupRole,
+} from "@/types/orgDirectory";
 
 export const PROFILES_TABLE = "profiles";
 
@@ -12,6 +19,8 @@ export interface RemoteProfile {
   displayName: string;
   orgRole: SimulationRole;
   seniority: SeniorityLevel;
+  accountStatus: AccountStatus;
+  requestedRole: SignupRole;
 }
 
 export interface ProfileRow {
@@ -20,10 +29,20 @@ export interface ProfileRow {
   display_name: string;
   org_role: string;
   seniority: string;
+  account_status?: string | null;
+  requested_role?: string | null;
 }
 
 function sanitizeSeniority(raw: string): SeniorityLevel {
   return (SENIORITY_LEVELS as readonly string[]).includes(raw) ? (raw as SeniorityLevel) : "mid";
+}
+
+function sanitizeAccountStatus(raw: string | null | undefined): AccountStatus {
+  return (ACCOUNT_STATUSES as readonly string[]).includes(raw ?? "") ? (raw as AccountStatus) : "active";
+}
+
+function sanitizeSignupRole(raw: string | null | undefined): SignupRole {
+  return (SIGNUP_ROLES as readonly string[]).includes(raw ?? "") ? (raw as SignupRole) : "employee";
 }
 
 export function mapProfileRow(row: ProfileRow, emailFallback: string): RemoteProfile {
@@ -33,7 +52,28 @@ export function mapProfileRow(row: ProfileRow, emailFallback: string): RemotePro
     displayName: row.display_name?.trim() || emailFallback.split("@")[0] || "User",
     orgRole: sanitizeSimulationRole(row.org_role),
     seniority: sanitizeSeniority(row.seniority ?? "mid"),
+    accountStatus: sanitizeAccountStatus(row.account_status),
+    requestedRole: sanitizeSignupRole(row.requested_role),
   };
+}
+
+async function selectProfiles(
+  supabase: SupabaseClient,
+  query: "single" | "all",
+  userId?: string,
+): Promise<ProfileRow[] | null> {
+  const columns = "*";
+  let request = supabase.from(PROFILES_TABLE).select(columns);
+  if (userId) request = request.eq("id", userId);
+  if (query === "all") {
+    const { data, error } = await request.order("display_name", { ascending: true });
+    if (error) return null;
+    return (data ?? []) as ProfileRow[];
+  } else {
+    const { data, error } = await request.maybeSingle();
+    if (error) return null;
+    return data ? [data as ProfileRow] : [];
+  }
 }
 
 export async function fetchProfileForUser(
@@ -41,24 +81,25 @@ export async function fetchProfileForUser(
   userId: string,
   emailFallback: string,
 ): Promise<RemoteProfile | null> {
-  const { data, error } = await supabase
-    .from(PROFILES_TABLE)
-    .select("id, email, display_name, org_role, seniority")
-    .eq("id", userId)
-    .maybeSingle();
-  if (error || !data) return null;
-  return mapProfileRow(data as ProfileRow, emailFallback);
+  const rows = await selectProfiles(supabase, "single", userId);
+  if (!rows?.[0]) return null;
+  return mapProfileRow(rows[0], emailFallback);
 }
 
 export async function fetchAllProfiles(supabase: SupabaseClient): Promise<RemoteProfile[]> {
-  const { data, error } = await supabase
-    .from(PROFILES_TABLE)
-    .select("id, email, display_name, org_role, seniority")
-    .order("display_name", { ascending: true });
-  if (error || !data) return [];
-  return (data as (ProfileRow & { email?: string })[]).map((row) =>
+  const rows = await selectProfiles(supabase, "all");
+  if (!rows) return [];
+  return rows.map((row) =>
     mapProfileRow(
-      { id: row.id, display_name: row.display_name, org_role: row.org_role, seniority: row.seniority, email: row.email },
+      {
+        id: row.id,
+        display_name: row.display_name,
+        org_role: row.org_role,
+        seniority: row.seniority,
+        email: row.email,
+        account_status: row.account_status,
+        requested_role: row.requested_role,
+      },
       row.email ?? "user@unknown",
     ),
   );
@@ -67,7 +108,14 @@ export async function fetchAllProfiles(supabase: SupabaseClient): Promise<Remote
 export async function updateProfileRow(
   supabase: SupabaseClient,
   userId: string,
-  patch: { display_name?: string; org_role?: string; seniority?: string },
+  patch: {
+    display_name?: string;
+    org_role?: string;
+    seniority?: string;
+    account_status?: string;
+    requested_role?: string;
+    approved_at?: string | null;
+  },
 ): Promise<{ ok: true } | { ok: false; message: string }> {
   const { error } = await supabase.from(PROFILES_TABLE).update(patch).eq("id", userId);
   if (error) return { ok: false, message: error.message };
