@@ -53,6 +53,7 @@ import {
   roleMayAccessPage,
 } from "@/lib/roleAccess";
 import { generateRoadmapItems } from "@/lib/roadmap";
+import { enrichFrictionReportFromStorage, mergeReportWithTimestampFields, applyStatusTransition } from "@/lib/reportStatusTimestamps";
 import type { DataConnectionMode } from "@/lib/supabase";
 import { useAuthStore } from "@/store/authStore";
 import type { AppPage } from "@/types/appPage";
@@ -166,6 +167,14 @@ function coerceFrictionReport(raw: unknown, fallbackIndex: number): FrictionRepo
 
   if (!titleRaw || !process) return null;
 
+  let resolvedAt: string | undefined;
+  const ra = o.resolvedAt;
+  if (typeof ra === "string" && !Number.isNaN(new Date(ra).getTime())) resolvedAt = ra;
+
+  let updatedAt: string | undefined;
+  const ua = o.updatedAt;
+  if (typeof ua === "string" && !Number.isNaN(new Date(ua).getTime())) updatedAt = ua;
+
   const report: FrictionReport = {
     id,
     title: titleRaw,
@@ -182,6 +191,8 @@ function coerceFrictionReport(raw: unknown, fallbackIndex: number): FrictionRepo
     whenLabel: coerceOptionalString(o, "whenLabel"),
     whoLabel: coerceOptionalString(o, "whoLabel"),
   };
+  if (resolvedAt) report.resolvedAt = resolvedAt;
+  if (updatedAt) report.updatedAt = updatedAt;
   return report;
 }
 
@@ -198,7 +209,7 @@ function sanitizeReportsArray(raw: unknown): SanitizedReportsOutcome {
 
     const strictOk = raw.filter(isFrictionReportShape);
     if (strictOk.length === raw.length) {
-      return { reports: strictOk.map((r) => ({ ...r })), degraded: false };
+      return { reports: strictOk.map((r) => enrichFrictionReportFromStorage({ ...r })), degraded: false };
     }
 
     const coerced: FrictionReport[] = [];
@@ -212,7 +223,10 @@ function sanitizeReportsArray(raw: unknown): SanitizedReportsOutcome {
     }
 
     if (coerced.length > 0) {
-      return { reports: coerced.map((r) => ({ ...r })), degraded: coerced.length !== raw.length };
+      return {
+        reports: coerced.map((r) => enrichFrictionReportFromStorage({ ...r })),
+        degraded: coerced.length !== raw.length,
+      };
     }
 
     return { reports: [], degraded: false };
@@ -502,11 +516,13 @@ export const useFrictionStore = create<FrictionStoreState>()(
 
       addReport: (payload) => {
         const id = newReportId();
+        const t = new Date().toISOString();
         const report: FrictionReport = {
           ...payload,
           id,
           status: "open",
-          createdAt: new Date().toISOString(),
+          createdAt: t,
+          updatedAt: t,
           whenLabel: "just now",
           whoLabel: "You",
         };
@@ -522,10 +538,18 @@ export const useFrictionStore = create<FrictionStoreState>()(
       },
 
       updateReport: (id, updates) => {
+        const prev = get().reports.find((r) => r.id === id);
+        if (!prev) return;
+        const merged = mergeReportWithTimestampFields(prev, updates);
         set((s) => ({
-          reports: s.reports.map((r) => (r.id === id ? { ...r, ...updates } : r)),
+          reports: s.reports.map((r) => (r.id === id ? merged : r)),
         }));
-        void repoUpdateReport(id, updates).then((res) => {
+        void repoUpdateReport(id, {
+          ...updates,
+          status: merged.status,
+          updatedAt: merged.updatedAt,
+          resolvedAt: merged.status === "resolved" ? merged.resolvedAt : null,
+        } as Partial<FrictionReport> & { resolvedAt?: string | null }).then((res) => {
           set({ dataConnectionMode: res.mode, reportError: res.warning ?? null });
           if (res.warning) get().pulseToast(res.warning);
         });
@@ -539,7 +563,7 @@ export const useFrictionStore = create<FrictionStoreState>()(
         }
         set((s) => ({
           reports: s.reports.map((r) =>
-            r.category === category && r.process === process ? { ...r, status } : r,
+            r.category === category && r.process === process ? applyStatusTransition(r, status) : r,
           ),
         }));
         const current = get().reports;
@@ -691,14 +715,14 @@ export const useFrictionStore = create<FrictionStoreState>()(
       },
       migrate: (oldState: unknown, fromVersion: number) => {
         const p = typeof oldState === "object" && oldState !== null ? (oldState as Record<string, unknown>) : {};
-        const { reports } = sanitizeReportsArray(p.reports);
+        const { reports: migratedReports } = sanitizeReportsArray(p.reports);
         let companySettings =
           fromVersion >= 5 ? mergeCompanySettings(p.companySettings) : defaultCompanySettings();
         if (fromVersion < 6) {
           companySettings = { ...companySettings, simulationRole: "admin" };
         }
         return {
-          reports,
+          reports: migratedReports,
           hourlyRate: sanitizeHourlyRate(p.hourlyRate),
           demoScenarioId: sanitizeScenarioId(p.demoScenarioId),
           integrationSettings:

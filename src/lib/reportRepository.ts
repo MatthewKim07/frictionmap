@@ -27,9 +27,11 @@ type DbReportRow = {
   status: string;
   created_at: string;
   updated_at?: string | null;
+  resolved_at?: string | null;
 };
 
-function toDbRow(r: FrictionReport): Omit<DbReportRow, "updated_at"> {
+function toDbRow(r: FrictionReport): DbReportRow {
+  const updated = r.updatedAt ?? r.createdAt;
   return {
     id: r.id,
     title: r.title,
@@ -43,11 +45,13 @@ function toDbRow(r: FrictionReport): Omit<DbReportRow, "updated_at"> {
     suggestion: r.suggestion ?? "",
     status: r.status,
     created_at: r.createdAt,
+    updated_at: updated,
+    resolved_at: r.resolvedAt ?? null,
   };
 }
 
 function fromDbRow(row: DbReportRow): FrictionReport {
-  return {
+  const base: FrictionReport = {
     id: row.id,
     title: row.title,
     description: row.description,
@@ -61,6 +65,9 @@ function fromDbRow(row: DbReportRow): FrictionReport {
     status: row.status as FrictionReport["status"],
     createdAt: row.created_at,
   };
+  if (row.updated_at) base.updatedAt = row.updated_at;
+  if (row.resolved_at) base.resolvedAt = row.resolved_at;
+  return base;
 }
 
 function readReportsFromPersistStorage(): FrictionReport[] | null {
@@ -152,10 +159,20 @@ export async function updateReport(
   if (updates.suggestion !== undefined) patch.suggestion = updates.suggestion;
   if (updates.status !== undefined) patch.status = updates.status;
   if (updates.createdAt !== undefined) patch.created_at = updates.createdAt;
+  if (updates.updatedAt !== undefined) patch.updated_at = updates.updatedAt;
+
+  const ra = updates.resolvedAt;
+  if (ra === null) {
+    patch.resolved_at = null;
+  } else if (typeof ra === "string") {
+    patch.resolved_at = ra;
+  } else if (updates.status !== undefined && updates.status !== "resolved") {
+    patch.resolved_at = null;
+  }
 
   const { error } = await supabase
     .from(REPORTS_TABLE)
-    .update({ ...patch, updated_at: new Date().toISOString() })
+    .update({ ...patch, updated_at: patch.updated_at ?? new Date().toISOString() })
     .eq("id", id);
 
   if (error) {

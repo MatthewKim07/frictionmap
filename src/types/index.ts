@@ -42,6 +42,10 @@ export interface FrictionReport {
   suggestion: string;
   status: ReportStatus;
   createdAt: string;
+  /** When the report was last marked resolved (cleared when status leaves resolved). */
+  resolvedAt?: string;
+  /** Last mutation time for the report row (status edits, triage, etc.). */
+  updatedAt?: string;
   whenLabel?: string;
   whoLabel?: string;
 }

@@ -12,6 +12,11 @@ function hrsAgo(n: number): string {
   return new Date(Date.now() - n * 60 * 60 * 1000).toISOString();
 }
 
+/** Resolved-on date in the past (weeks + optional extra days). */
+function weeksAgo(weeks: number, extraDays = 0): string {
+  return new Date(Date.now() - (weeks * 7 + extraDays) * 24 * 60 * 60 * 1000).toISOString();
+}
+
 /** Balanced Operational demo — spans Engineering, Finance, Sales, Marketing, Support, Ops, HR, Product. */
 const OPERATIONS_TEAM_REPORTS: FrictionReport[] = [
   {
@@ -112,8 +117,10 @@ const OPERATIONS_TEAM_REPORTS: FrictionReport[] = [
     frequency: "weekly",
     severity: "medium",
     suggestion: "Ship one onboarding HQ with validated links and deprecate stray duplicates.",
-    status: "planned",
-    createdAt: daysAgo(2),
+    status: "resolved",
+    createdAt: daysAgo(40),
+    resolvedAt: weeksAgo(5, 1),
+    updatedAt: weeksAgo(5, 1),
     whenLabel: "2d ago",
     whoLabel: "S. Nair",
   },
@@ -180,8 +187,10 @@ const OPERATIONS_TEAM_REPORTS: FrictionReport[] = [
     frequency: "weekly",
     severity: "high",
     suggestion: "Require checklist + explicit owner signatures before backlog items leave Engineering.",
-    status: "reviewing",
-    createdAt: hrsAgo(18),
+    status: "resolved",
+    createdAt: daysAgo(21),
+    resolvedAt: weeksAgo(2, 2),
+    updatedAt: weeksAgo(2, 2),
     whenLabel: "today",
     whoLabel: "D. Reyes",
   },
@@ -214,8 +223,10 @@ const OPERATIONS_TEAM_REPORTS: FrictionReport[] = [
     frequency: "weekly",
     severity: "low",
     suggestion: "Ship curated explores with glossary-style definitions surfaced in-product.",
-    status: "open",
-    createdAt: hrsAgo(3),
+    status: "resolved",
+    createdAt: daysAgo(12),
+    resolvedAt: daysAgo(4),
+    updatedAt: daysAgo(4),
     whenLabel: "today",
     whoLabel: "D. Ito",
   },
@@ -303,8 +314,10 @@ const ENGINEERING_HANDOFF_CHAOS_REPORTS: FrictionReport[] = [
     frequency: "daily",
     severity: "high",
     suggestion: "Deprecate redundant proxy UI and funnel customer issues through SSO-backed integrations.",
-    status: "planned",
-    createdAt: hrsAgo(6),
+    status: "resolved",
+    createdAt: weeksAgo(12, 2),
+    resolvedAt: weeksAgo(9, 0),
+    updatedAt: weeksAgo(9, 0),
     whenLabel: "today",
     whoLabel: "E. Gould",
   },
@@ -407,6 +420,8 @@ const ENGINEERING_HANDOFF_CHAOS_REPORTS: FrictionReport[] = [
     suggestion: "Designate one reliability dashboard surfaced in launch reviews.",
     status: "resolved",
     createdAt: daysAgo(6),
+    resolvedAt: daysAgo(4),
+    updatedAt: daysAgo(4),
     whenLabel: "6d ago",
     whoLabel: "P. Jain",
   },
@@ -477,8 +492,10 @@ const FINANCE_MANUAL_WORKLOAD_REPORTS: FrictionReport[] = [
     frequency: "weekly",
     severity: "high",
     suggestion: "Retire spreadsheets in favor of live CRM-financial pulls with change log.",
-    status: "planned",
-    createdAt: hrsAgo(10),
+    status: "resolved",
+    createdAt: daysAgo(24),
+    resolvedAt: daysAgo(9),
+    updatedAt: daysAgo(9),
     whenLabel: "today",
     whoLabel: "T. Gomez",
   },
@@ -579,8 +596,10 @@ const FINANCE_MANUAL_WORKLOAD_REPORTS: FrictionReport[] = [
     frequency: "monthly",
     severity: "critical",
     suggestion: "Unblock IdP provisioning feed then diff automatically with exception-only review.",
-    status: "reviewing",
-    createdAt: daysAgo(4),
+    status: "resolved",
+    createdAt: daysAgo(30),
+    resolvedAt: daysAgo(6),
+    updatedAt: daysAgo(6),
     whenLabel: "4d ago",
     whoLabel: "C. Byrne",
   },

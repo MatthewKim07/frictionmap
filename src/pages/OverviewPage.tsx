@@ -1,6 +1,7 @@
 import { motion } from "framer-motion";
 import { useMemo } from "react";
 
+import { FrictionSolvedOverviewCard } from "@/components/resolution/FrictionSolvedOverviewCard";
 import { DEFAULT_COMPANY_NAME } from "@/constants/companySettings";
 import { BarRow } from "@/components/dashboard/BarRow";
 import { InsightsMetricCard } from "@/components/dashboard/InsightsMetricCard";
@@ -157,6 +158,15 @@ export function OverviewPage() {
               />
             </div>
           </section>
+
+          {mayInsights ? (
+            <FrictionSolvedOverviewCard
+              reports={reports}
+              hourlyRate={hourlyRate}
+              currencyCode={currencyCode}
+              onOpenInsights={() => setPage("insights")}
+            />
+          ) : null}
 
           {topRoadmap && (
             <motion.section
