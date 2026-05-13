@@ -1,3 +1,4 @@
+import { FrictionMapBrandText } from "@/components/brand/BrandWordmark";
 import { OperationsHeatmap } from "@/components/landing/OperationsHeatmap";
 import { useAuthStore, type AuthPanelMode } from "@/store/authStore";
 
@@ -24,7 +25,7 @@ export function LandingPage() {
       <header className="landing-header">
         <div className="brand">
           <span className="brand-mark" aria-hidden />
-          <span>FrictionMap</span>
+          <FrictionMapBrandText />
         </div>
         <nav className="landing-auth-actions" aria-label="Account">
           <LandingNavButton mode="sign-in">Sign in</LandingNavButton>

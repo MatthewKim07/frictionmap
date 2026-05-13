@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { useState } from "react";
 
 import { SupabaseAuthSync } from "@/components/auth/SupabaseAuthSync";
-import { BrandWordmark } from "@/components/brand/BrandWordmark";
+import { BrandWordmark, FrictionMapBrandText } from "@/components/brand/BrandWordmark";
 import { LoginPanel } from "@/components/auth/LoginPanel";
 import { PendingAccessScreen } from "@/components/auth/PendingAccessScreen";
 import { BusinessImpactReportModal } from "@/components/impact/BusinessImpactReportModal";
@@ -114,7 +114,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             <div className="brand-block">
               <div className="brand">
                 <span className="brand-mark" aria-hidden />
-                <span>FrictionMap</span>
+                <FrictionMapBrandText />
               </div>
               {orgLabel ? <p className="brand-org">{orgLabel}</p> : null}
               <p className="brand-tagline" style={{ marginTop: orgLabel ? 4 : undefined }}>
