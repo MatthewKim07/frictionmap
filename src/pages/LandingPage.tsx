@@ -1,5 +1,3 @@
-import { useEffect, useState } from "react";
-
 import { OperationsHeatmap } from "@/components/landing/OperationsHeatmap";
 import { useAuthStore, type AuthPanelMode } from "@/store/authStore";
 
@@ -21,15 +19,6 @@ function LandingNavButton({
 }
 
 export function LandingPage() {
-  const [liveCount, setLiveCount] = useState(247);
-
-  useEffect(() => {
-    const timer = window.setInterval(() => {
-      setLiveCount((count) => count + Math.floor(Math.random() * 3));
-    }, 2200);
-    return () => window.clearInterval(timer);
-  }, []);
-
   return (
     <div className="landing-page">
       <header className="landing-header">
@@ -60,22 +49,6 @@ export function LandingPage() {
                 <LandingNavButton mode="sign-up" variant="coral">Create account →</LandingNavButton>
                 <LandingNavButton mode="sign-up">Book a demo</LandingNavButton>
               </div>
-            </div>
-          </div>
-          <div className="landing-live-chip" aria-label={`${liveCount} reports today`}>
-            <span className="landing-live-dot" />
-            <span>LIVE</span>
-            <span aria-hidden="true">•</span>
-            <strong>{liveCount.toLocaleString()}</strong>
-            <span>reports today</span>
-          </div>
-          <div className="landing-heat-legend" aria-hidden="true">
-            <span>Friction intensity</span>
-            <i />
-            <div>
-              <small>Cool</small>
-              <small>Warm</small>
-              <small>Hot</small>
             </div>
           </div>
         </section>
