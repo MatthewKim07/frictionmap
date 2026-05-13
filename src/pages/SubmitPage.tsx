@@ -218,11 +218,12 @@ function TimeChips({ onSelect }: { onSelect: (v: string) => void }) {
 
 // ─── report list row ────────────────────────────────────────────────────────
 
-function ReportRow({ r, hourlyRate, currencyCode }: { r: FrictionReport; hourlyRate: number; currencyCode: string }) {
+function ReportRow({ r, hourlyRate, currencyCode, onClick, showWho }: { r: FrictionReport; hourlyRate: number; currencyCode: string; onClick: () => void; showWho?: boolean }) {
   const monthlyCost = Math.round(calculateMonthlyCost(r, hourlyRate));
   const freqDisplay = r.frequencyLabel ?? formatFrequencyLabel(r.frequency);
   return (
     <div
+      onClick={onClick}
       style={{
         display: "grid",
         gridTemplateColumns: "1fr auto auto",
@@ -230,7 +231,10 @@ function ReportRow({ r, hourlyRate, currencyCode }: { r: FrictionReport; hourlyR
         alignItems: "center",
         padding: "14px 0",
         borderBottom: "1px solid var(--rule)",
+        cursor: "pointer",
       }}
+      onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.75")}
+      onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
     >
       <div style={{ minWidth: 0 }}>
         <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 5, lineHeight: 1.3 }}>{r.title}</div>
@@ -240,6 +244,9 @@ function ReportRow({ r, hourlyRate, currencyCode }: { r: FrictionReport; hourlyR
             <span style={{ fontSize: 12, color: "var(--ink-mute)" }}>{r.process}</span>
           )}
           <span style={{ fontSize: 12, color: "var(--ink-mute)" }}>· {freqDisplay}</span>
+          {showWho && r.whoLabel && (
+            <span style={{ fontSize: 12, color: "var(--ink-mute)", fontStyle: "italic" }}>· {r.whoLabel}</span>
+          )}
         </div>
       </div>
       <div style={{ textAlign: "center" }}>
@@ -272,8 +279,10 @@ export function SubmitPage() {
   const canSeeAllReports = canTriageRoadmapClusters(effectiveRole);
 
   // ── view state ────────────────────────────────────────────────────────────
-  const [view, setView] = useState<"list" | "create">("list");
+  const [view, setView] = useState<"list" | "create" | "detail">("list");
   const [activeTab, setActiveTab] = useState<"mine" | "all">("mine");
+  const [selectedReport, setSelectedReport] = useState<FrictionReport | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
 
   // ── form state ────────────────────────────────────────────────────────────
   const [form, setFormState] = useState({
@@ -614,7 +623,18 @@ export function SubmitPage() {
   // ─────────────────────────────────────────────────────────────────────────
 
   if (view === "list") {
-    const displayedReports = activeTab === "mine" ? myReports : allReports;
+    const q = searchQuery.trim().toLowerCase();
+    const baseReports = activeTab === "mine" ? myReports : allReports;
+    const displayedReports = q
+      ? baseReports.filter((r) =>
+          r.title.toLowerCase().includes(q) ||
+          r.description.toLowerCase().includes(q) ||
+          r.category.toLowerCase().includes(q) ||
+          r.process.toLowerCase().includes(q) ||
+          r.team.toLowerCase().includes(q) ||
+          (r.whoLabel ?? "").toLowerCase().includes(q)
+        )
+      : baseReports;
 
     return (
       <motion.div
@@ -671,17 +691,31 @@ export function SubmitPage() {
           })}
         </div>
 
-        <div style={{ marginTop: 20 }}>
+        {/* search bar */}
+        <div style={{ marginTop: 16 }}>
+          <input
+            className="input"
+            type="search"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search by title, category, team, process…"
+            style={{ width: "33%", boxSizing: "border-box" }}
+          />
+        </div>
+
+        <div style={{ marginTop: 12 }}>
           {displayedReports.length === 0 ? (
             <EmptyState
-              title={activeTab === "mine" ? "No reports yet" : "No reports in the org yet"}
+              title={q ? "No matching reports" : activeTab === "mine" ? "No reports yet" : "No reports in the org yet"}
               description={
-                activeTab === "mine"
-                  ? "You haven't submitted any friction reports. Create one to start tracking friction and its impact."
-                  : "No friction reports have been submitted yet."
+                q
+                  ? `No reports match "${searchQuery}".`
+                  : activeTab === "mine"
+                    ? "You haven't submitted any friction reports. Create one to start tracking friction and its impact."
+                    : "No friction reports have been submitted yet."
               }
             >
-              {activeTab === "mine" && (
+              {!q && activeTab === "mine" && (
                 <button type="button" className="btn coral" onClick={() => setView("create")}>
                   ＋ Create Report
                 </button>
@@ -695,10 +729,131 @@ export function SubmitPage() {
                   r={r}
                   hourlyRate={hourlyRate}
                   currencyCode={currencyCode}
+                  onClick={() => { setSelectedReport(r); setView("detail"); }}
+                  showWho={activeTab === "all"}
                 />
               ))}
             </div>
           )}
+        </div>
+      </motion.div>
+    );
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────────────────
+  // DETAIL VIEW
+  // ─────────────────────────────────────────────────────────────────────────
+
+  if (view === "detail" && selectedReport) {
+    const r = selectedReport;
+    const monthlyCost = Math.round(calculateMonthlyCost(r, hourlyRate));
+    const monthlyHours = Math.round(calculateMonthlyHours(r) * 10) / 10;
+    const freqDisplay = r.frequencyLabel ?? formatFrequencyLabel(r.frequency);
+
+    const Field = ({ label, children }: { label: string; children: React.ReactNode }) => (
+      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+        <span style={{ fontSize: 12, color: "var(--ink-mute)", fontWeight: 500 }}>{label}</span>
+        <span style={{ fontSize: 14, color: "var(--ink)", lineHeight: 1.5 }}>{children}</span>
+      </div>
+    );
+
+    return (
+      <motion.div
+        className="fade-in"
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.2 }}
+      >
+        <button
+          type="button"
+          onClick={() => setView("list")}
+          style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 13, color: "var(--ink-mute)", background: "none", border: "none", cursor: "pointer", padding: 0, marginBottom: 18 }}
+        >
+          ← Back to reports
+        </button>
+
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 12, marginBottom: 20 }}>
+          <div>
+            <h1 style={{ marginBottom: 6 }}>{r.title}</h1>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
+              <CategoryPill category={r.category} />
+              <SeverityPill severity={r.severity} />
+              <StatusPill status={r.status} />
+              <span style={{ fontSize: 12, color: "var(--ink-mute)" }}>ID · {r.id}</span>
+            </div>
+          </div>
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.35fr) minmax(260px, 1fr)", gap: 20, alignItems: "start" }}>
+          {/* left: report fields */}
+          <div className="card" style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+            <Field label="Description">{r.description || <span style={{ color: "var(--ink-mute)" }}>—</span>}</Field>
+
+            <div style={{ borderTop: "1px solid var(--rule)" }} />
+
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+              <Field label="Team">{r.team}</Field>
+              <Field label="Process / Tool">{r.process || <span style={{ color: "var(--ink-mute)" }}>—</span>}</Field>
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+              <Field label="How often">{freqDisplay}</Field>
+              <Field label="Time lost per occurrence">{r.timeLostHours}h</Field>
+            </div>
+
+            {r.suggestion && (
+              <>
+                <div style={{ borderTop: "1px solid var(--rule)" }} />
+                <Field label="Fix suggestion">{r.suggestion}</Field>
+              </>
+            )}
+
+            {r.attachmentUrl && (
+              <>
+                <div style={{ borderTop: "1px solid var(--rule)" }} />
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  <span style={{ fontSize: 12, color: "var(--ink-mute)", fontWeight: 500 }}>Attachments</span>
+                  {r.attachmentUrl.split("\n").filter(Boolean).map((url, i) => (
+                    <a
+                      key={i}
+                      href={url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{ fontSize: 14, color: "var(--coral)", wordBreak: "break-all" }}
+                    >
+                      {url.startsWith("blob:") ? `📎 File ${i + 1}` : url}
+                    </a>
+                  ))}
+                </div>
+              </>
+            )}
+
+            <div style={{ borderTop: "1px solid var(--rule)" }} />
+            <div style={{ fontSize: 12, color: "var(--ink-mute)" }}>
+              Submitted {r.whoLabel ? `by ${r.whoLabel} · ` : ""}{relativeDate(r)}
+            </div>
+          </div>
+
+          {/* right: impact */}
+          <div className="card" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            <div style={{ fontSize: 12, color: "var(--ink-mute)", fontWeight: 500 }}>Estimated impact</div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              <div>
+                <div style={{ fontSize: 11, color: "var(--ink-mute)" }}>Monthly hours</div>
+                <div style={{ fontSize: 22, fontWeight: 600, color: "var(--coral)", fontVariantNumeric: "tabular-nums" }}>{monthlyHours}h</div>
+              </div>
+              <div>
+                <div style={{ fontSize: 11, color: "var(--ink-mute)" }}>Monthly cost</div>
+                <div style={{ fontSize: 22, fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>
+                  {formatCurrency(monthlyCost, currencyCode as Parameters<typeof formatCurrency>[1])}
+                </div>
+              </div>
+            </div>
+            <p style={{ margin: 0, fontSize: 13, color: "var(--ink-soft)", lineHeight: 1.5, borderTop: "1px solid var(--rule)", paddingTop: 14 }}>
+              {buildImpactNarrative(r)}
+            </p>
+          </div>
         </div>
       </motion.div>
     );
