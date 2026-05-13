@@ -11,6 +11,10 @@ import {
 } from "@/constants/companySettings";
 import { FRICTION_CATEGORIES, MAX_HOURLY_RATE, MIN_HOURLY_RATE, TEAMS } from "@/constants/friction";
 import { DEMO_SCENARIO_IDS, DEMO_SCENARIO_LABELS, type DemoScenarioId } from "@/data/demoScenarioTypes";
+import { RemoteTeamDirectorySection } from "@/components/settings/RemoteTeamDirectorySection";
+import { TeamDirectorySection } from "@/components/settings/TeamDirectorySection";
+import { canAccessSettingsTab } from "@/lib/roleAccess";
+import { useEffectiveOrgRole, useSessionUser } from "@/hooks/useEffectiveOrgRole";
 import { isSupabaseConfigured } from "@/lib/supabase";
 import { useFrictionStore } from "@/store/frictionStore";
 
@@ -26,6 +30,9 @@ export function SettingsPage() {
   const dataConnectionMode = useFrictionStore((s) => s.dataConnectionMode);
   const clearAllLocalData = useFrictionStore((s) => s.clearAllLocalData);
 
+  const effectiveRole = useEffectiveOrgRole();
+  const sessionUser = useSessionUser();
+
   const [companyDraft, setCompanyDraft] = useState(companySettings.companyName);
   const [rateDraft, setRateDraft] = useState(String(hourlyRate));
   const [newTeamDraft, setNewTeamDraft] = useState("");
@@ -39,6 +46,21 @@ export function SettingsPage() {
   }, [hourlyRate]);
 
   const teamOptions = useMemo(() => getEffectiveTeamOptions(companySettings), [companySettings]);
+
+  if (!canAccessSettingsTab(effectiveRole)) {
+    return (
+      <div className="fade-in">
+        <h1>Settings</h1>
+        <p className="subtitle">This area is restricted to administrators on this device.</p>
+        <div className="card" style={{ maxWidth: 520, marginTop: 24, padding: "22px 24px" }}>
+          <p style={{ margin: 0, color: "var(--ink-soft)", lineHeight: 1.6, fontSize: 15 }}>
+            FrictionMap does not use accounts here — organization access is stored in this browser. Ask whoever manages
+            FrictionMap to open <strong>Settings</strong> using the <strong>Administrator</strong> or <strong>Judge Demo</strong> role, then assign your device to Employee, Manager, or Operations Leader as appropriate.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   const supabaseOn = isSupabaseConfigured();
   const dataModeLabel =
@@ -326,13 +348,22 @@ export function SettingsPage() {
           </ul>
         </section>
 
+        {isSupabaseConfigured() ? <RemoteTeamDirectorySection /> : <TeamDirectorySection />}
+
         <section className="card" style={{ padding: "20px 22px" }}>
-          <h2 style={{ fontSize: 17, marginBottom: 10 }}>Role simulation</h2>
-          <p style={{ margin: "0 0 12px", fontSize: 13, color: "var(--ink-mute)", lineHeight: 1.5 }}>
-            No login — this only adjusts emphasis in the shell to match how you are demoing the product.
-          </p>
+          <h2 style={{ fontSize: 17, marginBottom: 10 }}>Organization access</h2>
+          {sessionUser ? (
+            <p style={{ margin: "0 0 12px", fontSize: 13, color: "var(--ink-mute)", lineHeight: 1.5 }}>
+              Signed in as <strong>{sessionUser.displayName}</strong> — tabs and permissions follow their{" "}
+              <strong>organization role</strong> in Team directory. Use <strong>Sign out</strong> in the header to fall back to the device role below.
+            </p>
+          ) : (
+            <p style={{ margin: "0 0 12px", fontSize: 13, color: "var(--ink-mute)", lineHeight: 1.5 }}>
+              When nobody is signed in, this dropdown sets the <strong>device role</strong> for this browser. After sign-in, each person&apos;s access comes from Team directory until they sign out.
+            </p>
+          )}
           <div className="field">
-            <label htmlFor="settings-role">View as</label>
+            <label htmlFor="settings-role">Role for this browser</label>
             <select
               id="settings-role"
               className="select"

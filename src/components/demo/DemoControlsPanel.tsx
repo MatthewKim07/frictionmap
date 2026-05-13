@@ -2,12 +2,15 @@ import { useEffect, useState } from "react";
 
 import { MAX_HOURLY_RATE, MIN_HOURLY_RATE } from "@/constants/friction";
 import { DEMO_SCENARIO_IDS, DEMO_SCENARIO_LABELS, DEMO_SCENARIO_SHORT, type DemoScenarioId } from "@/data/demoScenarioTypes";
+import { canLoadAlternateDemoScenario, canShowOverviewDemoToolbar } from "@/lib/roleAccess";
+import { useEffectiveOrgRole } from "@/hooks/useEffectiveOrgRole";
 import { useFrictionStore } from "@/store/frictionStore";
 
 export function DemoControlsPanel() {
   const demoScenarioId = useFrictionStore((s) => s.demoScenarioId);
   const hourlyRate = useFrictionStore((s) => s.hourlyRate);
   const currencyCode = useFrictionStore((s) => s.companySettings.currencyCode);
+  const simulationRole = useEffectiveOrgRole();
   const loadDemoScenario = useFrictionStore((s) => s.loadDemoScenario);
   const setHourlyRate = useFrictionStore((s) => s.setHourlyRate);
   const resetDemoData = useFrictionStore((s) => s.resetDemoData);
@@ -17,6 +20,12 @@ export function DemoControlsPanel() {
   useEffect(() => {
     setRateDraft(String(hourlyRate));
   }, [hourlyRate]);
+
+  if (!canShowOverviewDemoToolbar(simulationRole)) {
+    return null;
+  }
+
+  const maySwapScenario = canLoadAlternateDemoScenario(simulationRole);
 
   const scenarioChange = (next: DemoScenarioId) => {
     if (next === demoScenarioId) return;
@@ -51,7 +60,9 @@ export function DemoControlsPanel() {
             Demo &amp; settings
           </h2>
           <p style={{ margin: 0, fontSize: 13, color: "var(--ink-mute)", lineHeight: 1.5 }}>
-            Switch datasets for judges, tweak economics, or reset to the baseline for the selected scenario.
+            {maySwapScenario
+              ? "Switch datasets for judges, tweak economics, or reset to the baseline for the selected scenario."
+              : "Tweak economics or reset to the baseline for the selected scenario. Loading a different demo dataset requires Operations, Administrator, or Judge Demo — or use Settings while signed in as an administrator."}
           </p>
         </div>
         <button type="button" className="btn secondary" onClick={() => resetDemoData()} style={{ flexShrink: 0 }}>
@@ -68,24 +79,33 @@ export function DemoControlsPanel() {
           alignItems: "end",
         }}
       >
-        <div className="field">
-          <label htmlFor="demo-scenario-picker">Demo scenario</label>
-          <select
-            id="demo-scenario-picker"
-            className="select"
-            value={demoScenarioId}
-            onChange={(e) => scenarioChange(e.target.value as DemoScenarioId)}
-          >
-            {DEMO_SCENARIO_IDS.map((id) => (
-              <option key={id} value={id}>
-                {DEMO_SCENARIO_LABELS[id]}
-              </option>
-            ))}
-          </select>
-          <p className="hint" style={{ marginTop: 6 }}>
-            {DEMO_SCENARIO_SHORT[demoScenarioId]}
-          </p>
-        </div>
+        {maySwapScenario ? (
+          <div className="field">
+            <label htmlFor="demo-scenario-picker">Demo scenario</label>
+            <select
+              id="demo-scenario-picker"
+              className="select"
+              value={demoScenarioId}
+              onChange={(e) => scenarioChange(e.target.value as DemoScenarioId)}
+            >
+              {DEMO_SCENARIO_IDS.map((id) => (
+                <option key={id} value={id}>
+                  {DEMO_SCENARIO_LABELS[id]}
+                </option>
+              ))}
+            </select>
+            <p className="hint" style={{ marginTop: 6 }}>
+              {DEMO_SCENARIO_SHORT[demoScenarioId]}
+            </p>
+          </div>
+        ) : (
+          <div className="field">
+            <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 6 }}>Demo scenario</div>
+            <p className="hint" style={{ margin: 0 }}>
+              Current dataset: <strong>{DEMO_SCENARIO_LABELS[demoScenarioId]}</strong>. Ask an Operations lead or administrator to switch scenarios from Integrations-capable roles or Settings.
+            </p>
+          </div>
+        )}
 
         <div className="field">
           <label htmlFor="demo-hourly-rate">Blended hourly cost ({currencyCode})</label>

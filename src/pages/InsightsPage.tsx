@@ -42,6 +42,12 @@ import {
   computeSavingsAnalytics,
   suggestTrendBucket,
 } from "@/lib/savingsAnalytics";
+import {
+  canOpenBusinessImpactReport,
+  canShowOverviewDemoToolbar,
+  roleMayAccessPage,
+} from "@/lib/roleAccess";
+import { useEffectiveOrgRole } from "@/hooks/useEffectiveOrgRole";
 import { useFrictionStore } from "@/store/frictionStore";
 import type { FrictionCategory, ReportStatus, Severity, Team } from "@/types";
 
@@ -62,6 +68,10 @@ export function InsightsPage() {
   const hourlyRate = useFrictionStore((s) => s.hourlyRate);
   const companySettings = useFrictionStore((s) => s.companySettings);
   const currencyCode = companySettings.currencyCode;
+  const simulationRole = useEffectiveOrgRole();
+  const mayImpactReport = canOpenBusinessImpactReport(simulationRole);
+  const mayRoadmap = roleMayAccessPage(simulationRole, "roadmap");
+  const mayOverviewToolbox = canShowOverviewDemoToolbar(simulationRole);
   const orgTrim = companySettings.companyName.trim();
   const roadmapRec =
     orgTrim && orgTrim !== DEFAULT_COMPANY_NAME ? { organizationLabel: orgTrim } : undefined;
@@ -159,12 +169,16 @@ export function InsightsPage() {
             <button type="button" className="btn coral" onClick={() => setPage("submit")}>
               Report friction
             </button>
-            <button type="button" className="btn secondary" onClick={() => setImpactReportModalOpen(true)}>
-              Generate impact report
-            </button>
-            <button type="button" className="btn secondary" onClick={() => setPage("overview")}>
-              Demo toolbox on Overview
-            </button>
+            {mayImpactReport ? (
+              <button type="button" className="btn secondary" onClick={() => setImpactReportModalOpen(true)}>
+                Generate impact report
+              </button>
+            ) : null}
+            {mayOverviewToolbox ? (
+              <button type="button" className="btn secondary" onClick={() => setPage("overview")}>
+                Demo toolbox on Overview
+              </button>
+            ) : null}
           </div>
         </div>
       </div>
@@ -187,12 +201,16 @@ export function InsightsPage() {
             <button type="button" className="btn secondary" onClick={() => setPage("submit")}>
               Report friction
             </button>
-            <button type="button" className="btn secondary" onClick={() => setImpactReportModalOpen(true)}>
-              Generate impact report
-            </button>
-            <button type="button" className="btn secondary" onClick={() => setPage("overview")}>
-              Overview demo toolbox
-            </button>
+            {mayImpactReport ? (
+              <button type="button" className="btn secondary" onClick={() => setImpactReportModalOpen(true)}>
+                Generate impact report
+              </button>
+            ) : null}
+            {mayOverviewToolbox ? (
+              <button type="button" className="btn secondary" onClick={() => setPage("overview")}>
+                Overview demo toolbox
+              </button>
+            ) : null}
           </div>
         </div>
       </div>
@@ -207,12 +225,16 @@ export function InsightsPage() {
           <p className="subtitle">Where time and money leak — filtered from live reports.</p>
         </div>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 10, justifyContent: "flex-end" }}>
-          <button type="button" className="btn secondary" onClick={() => setImpactReportModalOpen(true)}>
-            Generate impact report
-          </button>
-          <button type="button" className="btn secondary" onClick={() => setPage("roadmap")}>
-            See fix roadmap →
-          </button>
+          {mayImpactReport ? (
+            <button type="button" className="btn secondary" onClick={() => setImpactReportModalOpen(true)}>
+              Generate impact report
+            </button>
+          ) : null}
+          {mayRoadmap ? (
+            <button type="button" className="btn secondary" onClick={() => setPage("roadmap")}>
+              See fix roadmap →
+            </button>
+          ) : null}
         </div>
       </div>
 

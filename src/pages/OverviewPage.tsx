@@ -17,6 +17,12 @@ import {
   getRecentReports,
 } from "@/lib/frictionCalculations";
 import { categoryColorHex } from "@/lib/categoryMeta";
+import {
+  canOpenBusinessImpactReport,
+  canShowOverviewDemoToolbar,
+  roleMayAccessPage,
+} from "@/lib/roleAccess";
+import { useEffectiveOrgRole } from "@/hooks/useEffectiveOrgRole";
 import { generateRoadmapItems } from "@/lib/roadmap";
 import { useFrictionStore } from "@/store/frictionStore";
 
@@ -25,6 +31,7 @@ export function OverviewPage() {
   const hourlyRate = useFrictionStore((s) => s.hourlyRate);
   const currencyCode = useFrictionStore((s) => s.companySettings.currencyCode);
   const companyName = useFrictionStore((s) => s.companySettings.companyName);
+  const simulationRole = useEffectiveOrgRole();
   const setPage = useFrictionStore((s) => s.setPage);
   const setImpactReportModalOpen = useFrictionStore((s) => s.setImpactReportModalOpen);
 
@@ -42,6 +49,11 @@ export function OverviewPage() {
   const categoryRows = useMemo(() => getCategoryImpactRows(reports, hourlyRate), [reports, hourlyRate]);
   const maxCatHours = categoryRows[0]?.monthlyHours ?? 1;
 
+  const mayRoadmap = roleMayAccessPage(simulationRole, "roadmap");
+  const mayInsights = roleMayAccessPage(simulationRole, "insights");
+  const mayImpactReport = canOpenBusinessImpactReport(simulationRole);
+  const showDemoToolbar = canShowOverviewDemoToolbar(simulationRole);
+
   const topCategoryLabel = metrics.topCategory ?? "—";
   const topCategorySub = metrics.topCategory
     ? `${formatHours(metrics.topCategoryMonthlyHours)} · ${formatCurrency(Math.round(metrics.topCategoryMonthlyHours * hourlyRate), currencyCode)}/mo`
@@ -54,7 +66,7 @@ export function OverviewPage() {
 
   return (
     <div className="fade-in">
-      <DemoControlsPanel />
+      {showDemoToolbar ? <DemoControlsPanel /> : null}
 
       <motion.section
         aria-labelledby="overview-hero-heading"
@@ -73,14 +85,16 @@ export function OverviewPage() {
           <button type="button" className="btn coral" onClick={() => setPage("submit")}>
             Report friction
           </button>
-          <button type="button" className="btn secondary" onClick={() => setPage("roadmap")}>
-            Fix roadmap
-          </button>
-          {reports.length > 0 && (
+          {mayRoadmap ? (
+            <button type="button" className="btn secondary" onClick={() => setPage("roadmap")}>
+              Fix roadmap
+            </button>
+          ) : null}
+          {reports.length > 0 && mayImpactReport ? (
             <button type="button" className="btn secondary" onClick={() => setImpactReportModalOpen(true)}>
               Impact report
             </button>
-          )}
+          ) : null}
         </div>
       </motion.section>
 
@@ -173,9 +187,11 @@ export function OverviewPage() {
               <div style={{ fontSize: 14, fontWeight: 600, color: "var(--coral)", marginBottom: 14, fontVariantNumeric: "tabular-nums" }}>
                 {formatCurrency(Math.round(topRoadmap.monthlyCost), currencyCode)}/mo estimated leakage
               </div>
-              <button type="button" className="btn secondary" onClick={() => setPage("roadmap")}>
-                Open Fix Roadmap
-              </button>
+              {mayRoadmap ? (
+                <button type="button" className="btn secondary" onClick={() => setPage("roadmap")}>
+                  Open Fix Roadmap
+                </button>
+              ) : null}
             </motion.section>
           )}
 
@@ -183,7 +199,11 @@ export function OverviewPage() {
             <section className="card" aria-labelledby="overview-recent-heading">
               <div className="section-head">
                 <h2 id="overview-recent-heading" style={{ fontSize: 15 }}>Recent reports</h2>
-                <button type="button" className="link" onClick={() => setPage("insights")}>All →</button>
+                {mayInsights ? (
+                  <button type="button" className="link" onClick={() => setPage("insights")}>
+                    All →
+                  </button>
+                ) : null}
               </div>
               <div style={{ overflowX: "auto" }}>
                 <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, minWidth: 440 }}>
