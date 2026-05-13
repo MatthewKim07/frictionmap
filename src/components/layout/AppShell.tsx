@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 
 import { SupabaseAuthSync } from "@/components/auth/SupabaseAuthSync";
+import { BrandWordmark } from "@/components/brand/BrandWordmark";
 import { LoginPanel } from "@/components/auth/LoginPanel";
 import { PendingAccessScreen } from "@/components/auth/PendingAccessScreen";
 import { BusinessImpactReportModal } from "@/components/impact/BusinessImpactReportModal";
@@ -113,10 +114,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       <header className="header">
         <div className="header-inner">
           <div className="brand-block">
-            <div className="brand">
-              <span className="brand-mark" aria-hidden />
-              <span>FrictionMap</span>
-            </div>
+            <BrandWordmark />
             {orgLabel ? <p className="brand-org">{orgLabel}</p> : null}
             <p className="brand-tagline" style={{ marginTop: orgLabel ? 4 : undefined }}>
               Find the hidden drag slowing your team down.

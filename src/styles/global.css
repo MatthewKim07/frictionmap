@@ -71,10 +71,15 @@ input, select, textarea { font-family: inherit; }
   min-width: 0;
 }
 .brand {
-  display: flex; align-items: center; gap: 10px;
+  display: flex; align-items: center; gap: 12px;
   font-family: var(--font-logo);
-  font-size: 24px;
-  letter-spacing: -0.01em;
+  font-size: clamp(28px, 2.9vw, 36px);
+  letter-spacing: -0.02em;
+  line-height: 1.05;
+}
+.brand--compact {
+  font-size: clamp(22px, 2.2vw, 28px);
+  gap: 10px;
 }
 .brand-tagline {
   margin: 0;
@@ -121,21 +126,18 @@ input, select, textarea { font-family: inherit; }
   font-size: 13px;
   color: var(--ink-mute);
 }
-.brand-mark {
-  width: 26px; height: 26px; border-radius: 8px;
-  background: var(--ink);
-  position: relative;
-  display: flex; align-items: center; justify-content: center;
+.brand-logo {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  object-fit: contain;
+  flex-shrink: 0;
+  display: block;
 }
-.brand-mark::after {
-  content: ""; width: 8px; height: 8px; border-radius: 50%;
-  background: var(--coral);
-  box-shadow: 0 0 0 3px rgba(228, 90, 76, 0.3);
-  animation: pulse 2.4s ease-in-out infinite;
-}
-@keyframes pulse {
-  0%, 100% { box-shadow: 0 0 0 3px rgba(228, 90, 76, 0.3); }
-  50% { box-shadow: 0 0 0 6px rgba(228, 90, 76, 0); }
+.brand--compact .brand-logo {
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
 }
 
 /* Tab nav */

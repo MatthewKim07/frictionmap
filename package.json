@@ -4,6 +4,8 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
+    "sync:favicon": "cp src/assets/images/brand/logo.png public/icons/favicon.png",
+    "prebuild": "npm run sync:favicon",
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview"

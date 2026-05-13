@@ -1,6 +1,7 @@
 import type { FormEvent } from "react";
 import { useEffect, useState } from "react";
 
+import { BrandWordmark } from "@/components/brand/BrandWordmark";
 import { isSupabaseConfigured } from "@/lib/supabase";
 import { useAuthStore, type AuthPanelMode, type AuthResult } from "@/store/authStore";
 import { useFrictionStore } from "@/store/frictionStore";
@@ -122,6 +123,9 @@ export function LoginPanel() {
         <button type="button" className="auth-close" onClick={() => setLoginPanelOpen(false)} aria-label="Close sign-in panel">
           Close
         </button>
+        <div style={{ margin: "4px 0 12px", paddingRight: 72 }}>
+          <BrandWordmark compact />
+        </div>
 
         <div className="auth-panel-head">
           <p className="auth-eyebrow">Workspace access</p>

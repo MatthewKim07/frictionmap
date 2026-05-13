@@ -144,3 +144,7 @@ supabase/.temp/
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
+
+# macOS folder metadata (never commit)
+.DS_Store
+**/.DS_Store
