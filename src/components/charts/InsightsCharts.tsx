@@ -3,6 +3,8 @@ import {
   BarChart,
   CartesianGrid,
   Cell,
+  ComposedChart,
+  Line,
   Pie,
   PieChart,
   ResponsiveContainer,
@@ -236,6 +238,148 @@ export function SeverityDistributionChart({
           ))}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+export function SavingsLeakageComparisonChart({
+  currentLeakage,
+  afterTop3Leakage,
+  currency = DEFAULT_APP_CURRENCY,
+  title,
+  summary,
+}: {
+  currentLeakage: number;
+  afterTop3Leakage: number;
+  currency?: AppCurrencyCode;
+  title: string;
+  summary: string;
+}) {
+  const data = [
+    { label: "Current (est.)", value: Math.max(0, Math.round(currentLeakage)) },
+    { label: "After top 3 (est.)", value: Math.max(0, Math.round(afterTop3Leakage)) },
+  ];
+
+  return (
+    <div className="card" role="region" aria-labelledby="chart-savings-compare-title">
+      <div className="section-head">
+        <h2 id="chart-savings-compare-title">{title}</h2>
+      </div>
+      <p style={{ fontSize: 13, color: "var(--ink-soft)", margin: "0 0 12px" }}>{summary}</p>
+      <div style={{ width: "100%", height: 260 }}>
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart data={data} margin={{ left: 8, right: 8, top: 8, bottom: 8 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="var(--rule)" vertical={false} />
+            <XAxis dataKey="label" tick={{ fontSize: 11, fill: "var(--ink-mute)" }} interval={0} />
+            <YAxis
+              tick={{ fontSize: 11, fill: "var(--ink-mute)" }}
+              tickFormatter={(v) => formatCurrency(Number(v), currency)}
+            />
+            <Tooltip
+              formatter={(value: number) => [formatCurrency(value, currency), "Monthly (est.)"]}
+              contentStyle={{
+                borderRadius: 8,
+                border: "1px solid var(--rule-strong)",
+                fontSize: 13,
+              }}
+            />
+            <Bar dataKey="value" radius={[8, 8, 0, 0]} maxBarSize={72}>
+              <Cell fill="#E45A4C" />
+              <Cell fill="#6E7A4A" />
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  );
+}
+
+export function ReportSubmissionTrendChart({
+  data,
+  currency = DEFAULT_APP_CURRENCY,
+  title,
+  summary,
+}: {
+  data: { periodLabel: string; reportCount: number; estimatedMonthlyCostInBucket: number }[];
+  currency?: AppCurrencyCode;
+  title: string;
+  summary: string;
+}) {
+  if (!data.length) return null;
+
+  return (
+    <div className="card" role="region" aria-labelledby="chart-trend-title">
+      <div className="section-head">
+        <h2 id="chart-trend-title">{title}</h2>
+      </div>
+      <p style={{ fontSize: 13, color: "var(--ink-soft)", margin: "0 0 12px" }}>{summary}</p>
+      <div style={{ width: "100%", height: 300 }}>
+        <ResponsiveContainer width="100%" height="100%">
+          <ComposedChart data={data} margin={{ left: 4, right: 16, top: 8, bottom: 52 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="var(--rule)" />
+            <XAxis
+              dataKey="periodLabel"
+              tick={{ fontSize: 10, fill: "var(--ink-mute)" }}
+              interval={0}
+              angle={-32}
+              textAnchor="end"
+              height={68}
+            />
+            <YAxis
+              yAxisId="left"
+              width={36}
+              allowDecimals={false}
+              tick={{ fontSize: 11, fill: "var(--ink-mute)" }}
+              label={{ value: "Reports", angle: -90, position: "insideLeft", fill: "var(--ink-mute)", fontSize: 11 }}
+            />
+            <YAxis
+              yAxisId="right"
+              orientation="right"
+              width={52}
+              tick={{ fontSize: 10, fill: "var(--ink-mute)" }}
+              tickFormatter={(v) => formatCurrency(Number(v), currency)}
+              label={{
+                value: "Est. drag",
+                angle: 90,
+                position: "insideRight",
+                fill: "var(--ink-mute)",
+                fontSize: 11,
+              }}
+            />
+            <Tooltip
+              formatter={(value: number, name: string) => {
+                if (name === "Reports submitted") return [`${value}`, "Reports in period"];
+                return [formatCurrency(value, currency), "Est. monthly drag in bucket"];
+              }}
+              contentStyle={{
+                borderRadius: 8,
+                border: "1px solid var(--rule-strong)",
+                fontSize: 13,
+              }}
+            />
+            <Line
+              yAxisId="left"
+              type="monotone"
+              dataKey="reportCount"
+              name="Reports submitted"
+              stroke="#E45A4C"
+              strokeWidth={2}
+              dot={{ r: 3 }}
+              isAnimationActive={false}
+            />
+            <Line
+              yAxisId="right"
+              type="monotone"
+              dataKey="estimatedMonthlyCostInBucket"
+              name="Est. monthly drag"
+              stroke="#6E7A4A"
+              strokeWidth={2}
+              dot={{ r: 3 }}
+              isAnimationActive={false}
+            />
+          </ComposedChart>
+        </ResponsiveContainer>
+      </div>
     </div>
   );
 }

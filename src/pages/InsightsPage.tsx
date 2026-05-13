@@ -3,9 +3,12 @@ import { useMemo } from "react";
 
 import {
   CategoryHoursBarChart,
+  ReportSubmissionTrendChart,
+  SavingsLeakageComparisonChart,
   SeverityDistributionChart,
   TeamCostBarChart,
 } from "@/components/charts/InsightsCharts";
+import { DEFAULT_COMPANY_NAME } from "@/constants/companySettings";
 import { InsightsMetricCard } from "@/components/dashboard/InsightsMetricCard";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { CategoryPill, SeverityPill, StatusPill } from "@/components/ui/pills";
@@ -32,6 +35,13 @@ import {
   getSeverityCounts,
   getTeamMonthlyCosts,
 } from "@/lib/frictionCalculations";
+import { generateRoadmapItems } from "@/lib/roadmap";
+import {
+  buildImpactFunnel,
+  buildReportSubmissionTrend,
+  computeSavingsAnalytics,
+  suggestTrendBucket,
+} from "@/lib/savingsAnalytics";
 import { useFrictionStore } from "@/store/frictionStore";
 import type { FrictionCategory, ReportStatus, Severity, Team } from "@/types";
 
@@ -52,6 +62,9 @@ export function InsightsPage() {
   const hourlyRate = useFrictionStore((s) => s.hourlyRate);
   const companySettings = useFrictionStore((s) => s.companySettings);
   const currencyCode = companySettings.currencyCode;
+  const orgTrim = companySettings.companyName.trim();
+  const roadmapRec =
+    orgTrim && orgTrim !== DEFAULT_COMPANY_NAME ? { organizationLabel: orgTrim } : undefined;
 
   const teamFilterOptions = useMemo(() => {
     const base = getEffectiveTeamOptions(companySettings);
@@ -107,6 +120,24 @@ export function InsightsPage() {
     [filtered, hourlyRate],
   );
   const recent = useMemo(() => getRecentReports(filtered, 12), [filtered]);
+
+  const roadmapItems = useMemo(
+    () => generateRoadmapItems(filtered, hourlyRate, currencyCode, roadmapRec),
+    [filtered, hourlyRate, currencyCode, orgTrim],
+  );
+  const savingsModel = useMemo(
+    () => computeSavingsAnalytics(filtered, hourlyRate, roadmapItems),
+    [filtered, hourlyRate, roadmapItems],
+  );
+  const funnelSteps = useMemo(
+    () => buildImpactFunnel(filtered, roadmapItems, savingsModel.resolvedMonthlyCost),
+    [filtered, roadmapItems, savingsModel.resolvedMonthlyCost],
+  );
+  const trendBucket = useMemo(() => suggestTrendBucket(filtered), [filtered]);
+  const trendSeries = useMemo(
+    () => buildReportSubmissionTrend(filtered, hourlyRate, trendBucket),
+    [filtered, hourlyRate, trendBucket],
+  );
 
   const filtersActive =
     filters.selectedTeam !== null ||
@@ -379,6 +410,158 @@ export function InsightsPage() {
         <h2 style={{ fontSize: 17, marginBottom: 8 }}>What this means</h2>
         <p style={{ margin: 0, fontSize: 15, color: "var(--ink-soft)", lineHeight: 1.6 }}>{summaryText}</p>
       </motion.div>
+
+      <section className="card" style={{ marginBottom: 24, padding: "20px 22px" }} aria-labelledby="advanced-analytics-heading">
+        <h2 id="advanced-analytics-heading" style={{ fontSize: 18, marginBottom: 10 }}>
+          Savings &amp; resolution analytics
+        </h2>
+        <p style={{ margin: "0 0 12px", fontSize: 13, color: "var(--ink-mute)", lineHeight: 1.55 }}>
+          All dollar figures are <strong>estimates</strong> from submitted reports and your blended hourly rate — not guaranteed savings.
+        </p>
+        <ul style={{ margin: "0 0 18px", paddingLeft: 20, fontSize: 13, color: "var(--ink-soft)", lineHeight: 1.55 }}>
+          <li>
+            <strong>Potential savings</strong> assumes the selected roadmap bottlenecks (e.g. top 3 clusters) are fully resolved; real outcomes depend on scope and adoption.
+          </li>
+          <li>
+            <strong>Resolved savings</strong> is estimated from reports marked <strong>Resolved</strong> — keep statuses current for a useful read.
+          </li>
+          <li>
+            <strong>Use this to prioritize</strong> which operational fixes to assign first; pair with owners and re-measure after changes ship.
+          </li>
+        </ul>
+
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 200px), 1fr))",
+            gap: 12,
+            marginBottom: 20,
+          }}
+        >
+          <div style={{ padding: "14px 16px", borderRadius: 12, border: "1px solid var(--rule)", background: "var(--surface)" }}>
+            <div style={{ fontSize: 11, fontWeight: 600, color: "var(--ink-mute)", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+              Current est. leakage
+            </div>
+            <div style={{ fontSize: 22, fontWeight: 700, marginTop: 6, fontVariantNumeric: "tabular-nums" }}>
+              {formatCurrency(savingsModel.totalMonthlyLeakage, currencyCode)}/mo
+            </div>
+          </div>
+          <div style={{ padding: "14px 16px", borderRadius: 12, border: "1px solid var(--rule)", background: "var(--surface)" }}>
+            <div style={{ fontSize: 11, fontWeight: 600, color: "var(--ink-mute)", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+              After top 3 fixes (est.)
+            </div>
+            <div style={{ fontSize: 22, fontWeight: 700, marginTop: 6, fontVariantNumeric: "tabular-nums" }}>
+              {formatCurrency(savingsModel.estimatedLeakageAfterTop3, currencyCode)}/mo
+            </div>
+          </div>
+          <div style={{ padding: "14px 16px", borderRadius: 12, border: "1px solid var(--rule)", background: "var(--lime-soft)" }}>
+            <div style={{ fontSize: 11, fontWeight: 600, color: "var(--ink-mute)", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+              Est. monthly savings (top 3)
+            </div>
+            <div style={{ fontSize: 22, fontWeight: 700, marginTop: 6, fontVariantNumeric: "tabular-nums", color: "var(--sage)" }}>
+              {formatCurrency(savingsModel.estimatedMonthlySavingsFromTop3, currencyCode)}/mo
+            </div>
+          </div>
+          <div style={{ padding: "14px 16px", borderRadius: 12, border: "1px solid var(--rule)", background: "var(--surface)" }}>
+            <div style={{ fontSize: 11, fontWeight: 600, color: "var(--ink-mute)", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+              Est. annual savings (top 3)
+            </div>
+            <div style={{ fontSize: 22, fontWeight: 700, marginTop: 6, fontVariantNumeric: "tabular-nums" }}>
+              {formatCurrency(savingsModel.estimatedAnnualSavingsFromTop3, currencyCode)}/yr
+            </div>
+          </div>
+          <div style={{ padding: "14px 16px", borderRadius: 12, border: "1px solid var(--rule)", background: "var(--surface)" }}>
+            <div style={{ fontSize: 11, fontWeight: 600, color: "var(--ink-mute)", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+              Resolved savings (est.)
+            </div>
+            <div style={{ fontSize: 22, fontWeight: 700, marginTop: 6, fontVariantNumeric: "tabular-nums" }}>
+              {formatCurrency(savingsModel.resolvedMonthlyCost, currencyCode)}/mo
+            </div>
+            <div style={{ fontSize: 12, color: "var(--ink-mute)", marginTop: 4 }}>
+              {savingsModel.resolvedReportCount} resolved report{savingsModel.resolvedReportCount === 1 ? "" : "s"} ·{" "}
+              {savingsModel.percentCostAddressed}% of modeled leakage
+            </div>
+          </div>
+          <div style={{ padding: "14px 16px", borderRadius: 12, border: "1px solid var(--rule)", background: "var(--surface)" }}>
+            <div style={{ fontSize: 11, fontWeight: 600, color: "var(--ink-mute)", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+              Remaining open (est.)
+            </div>
+            <div style={{ fontSize: 22, fontWeight: 700, marginTop: 6, fontVariantNumeric: "tabular-nums" }}>
+              {formatCurrency(savingsModel.remainingOpenMonthlyCost, currencyCode)}/mo
+            </div>
+          </div>
+          <div style={{ padding: "14px 16px", borderRadius: 12, border: "1px solid var(--rule)", background: "var(--surface)" }}>
+            <div style={{ fontSize: 11, fontWeight: 600, color: "var(--ink-mute)", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+              Critical clusters (potential)
+            </div>
+            <div style={{ fontSize: 22, fontWeight: 700, marginTop: 6, fontVariantNumeric: "tabular-nums" }}>
+              {formatCurrency(savingsModel.potentialCriticalMonthlySavings, currencyCode)}/mo
+            </div>
+            <div style={{ fontSize: 12, color: "var(--ink-mute)", marginTop: 4 }}>
+              {savingsModel.criticalRoadmapClusterCount} Critical-ranked{" "}
+              {savingsModel.criticalRoadmapClusterCount === 1 ? "cluster" : "clusters"}
+            </div>
+          </div>
+        </div>
+
+        <h3 style={{ fontSize: 15, margin: "0 0 10px", fontWeight: 600 }}>Impact funnel</h3>
+        <p style={{ margin: "0 0 12px", fontSize: 12, color: "var(--ink-mute)", lineHeight: 1.45 }}>
+          Counts follow report statuses and clustered roadmap bottlenecks in this filtered view.
+        </p>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 140px), 1fr))",
+            gap: 10,
+            marginBottom: 22,
+          }}
+        >
+          {funnelSteps.map((step) => (
+            <div
+              key={step.label}
+              style={{
+                padding: "12px 14px",
+                borderRadius: 10,
+                border: "1px solid var(--rule-strong)",
+                background: "linear-gradient(180deg, var(--surface) 0%, var(--paper-2) 100%)",
+                textAlign: "center",
+              }}
+            >
+              <div style={{ fontSize: 11, color: "var(--ink-mute)", lineHeight: 1.35 }}>{step.label}</div>
+              <div style={{ fontSize: 20, fontWeight: 700, marginTop: 6, fontVariantNumeric: "tabular-nums" }}>
+                {step.kind === "currency"
+                  ? formatCurrency(Math.round(step.value), currencyCode)
+                  : step.value.toLocaleString()}
+              </div>
+              {step.kind === "currency" ? (
+                <div style={{ fontSize: 11, color: "var(--ink-mute)", marginTop: 2 }}>per month (est.)</div>
+              ) : null}
+            </div>
+          ))}
+        </div>
+
+        <div className="grid-2" style={{ gap: 20, marginBottom: 8 }}>
+          <SavingsLeakageComparisonChart
+            currentLeakage={savingsModel.totalMonthlyLeakage}
+            afterTop3Leakage={savingsModel.estimatedLeakageAfterTop3}
+            currency={currencyCode}
+            title="Before / after (top 3 roadmap fixes)"
+            summary="Compares total estimated monthly leakage in this view to a directional scenario where the three highest-ranked roadmap clusters are fully cleared."
+          />
+          {trendSeries.length > 0 ? (
+            <ReportSubmissionTrendChart
+              data={trendSeries}
+              currency={currencyCode}
+              title={`Reported friction over time (${trendBucket === "month" ? "by month" : "by week"})`}
+              summary="Based on report createdAt timestamps in this view only — not full company telemetry. Bucket size picks week vs month from how spread out dates are."
+            />
+          ) : (
+            <div className="card" style={{ padding: 20, display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <p style={{ margin: 0, fontSize: 14, color: "var(--ink-soft)" }}>Not enough dated reports to plot a trend.</p>
+            </div>
+          )}
+        </div>
+      </section>
 
       <div className="grid-2" style={{ marginBottom: 20 }}>
         {categoryChartData.length === 0 ? (
