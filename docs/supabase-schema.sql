@@ -89,3 +89,5 @@ create policy "demo_app_settings_all"
   for all
   using (true)
   with check (true);
+
+-- Optional: Supabase Auth + org roles in public.profiles — run docs/supabase-auth-profiles.sql after enabling Auth providers.
