@@ -4,7 +4,13 @@ import { SIMULATION_ROLE_LABELS, SIMULATION_ROLES, type SimulationRole } from "@
 import { getSupabaseClient } from "@/lib/supabase";
 import { fetchAllProfiles, updateProfileRow, type RemoteProfile } from "@/lib/supabaseProfile";
 import { useFrictionStore } from "@/store/frictionStore";
-import { SENIORITY_LABELS, SENIORITY_LEVELS, type SeniorityLevel } from "@/types/orgDirectory";
+import {
+  ACCOUNT_STATUS_LABELS,
+  SENIORITY_LABELS,
+  SENIORITY_LEVELS,
+  SIGNUP_ROLE_LABELS,
+  type SeniorityLevel,
+} from "@/types/orgDirectory";
 
 export function RemoteTeamDirectorySection() {
   const pulseToast = useFrictionStore((s) => s.pulseToast);
@@ -32,16 +38,14 @@ export function RemoteTeamDirectorySection() {
 
   return (
     <section className="card" style={{ padding: "20px 22px", gridColumn: "1 / -1" }}>
-      <h2 style={{ fontSize: 17, marginBottom: 10 }}>Team directory (Supabase)</h2>
+      <h2 style={{ fontSize: 17, marginBottom: 10 }}>Team directory</h2>
       <p style={{ margin: "0 0 16px", fontSize: 13, color: "var(--ink-mute)", lineHeight: 1.55 }}>
-        People and roles are stored in your Supabase project (<code style={{ fontSize: 12 }}>public.profiles</code>). Create
-        new accounts under <strong>Authentication → Users</strong> in the Supabase dashboard (or disable email confirmation
-        and use sign-up flows). The first person to register becomes <strong>Administrator</strong> automatically.
+        Manage workspace members, approve new sign-ups, and assign the roles that control what each person can open.
       </p>
       {loading ? (
         <p style={{ color: "var(--ink-soft)" }}>Loading roster…</p>
       ) : rows.length === 0 ? (
-        <p className="hint">No profiles found — run <code>docs/supabase-auth-profiles.sql</code> and sign in once.</p>
+        <p className="hint">No team members found yet.</p>
       ) : (
         <div style={{ overflowX: "auto" }}>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, minWidth: 560 }}>
@@ -51,6 +55,7 @@ export function RemoteTeamDirectorySection() {
                 <th style={{ padding: "8px", color: "var(--ink-mute)", fontWeight: 600 }}>Email</th>
                 <th style={{ padding: "8px", color: "var(--ink-mute)", fontWeight: 600 }}>Seniority</th>
                 <th style={{ padding: "8px", color: "var(--ink-mute)", fontWeight: 600 }}>Role</th>
+                <th style={{ padding: "8px", color: "var(--ink-mute)", fontWeight: 600 }}>Access</th>
                 <th style={{ padding: "8px 0 8px 8px", color: "var(--ink-mute)", fontWeight: 600 }}>Actions</th>
               </tr>
             </thead>
@@ -68,7 +73,7 @@ export function RemoteTeamDirectorySection() {
                     if (u.orgRole === "admin" && patch.org_role && patch.org_role !== "admin") {
                       const remainingAdmins = rows.filter((r) => r.id !== u.id && r.orgRole === "admin").length;
                       if (remainingAdmins < 1) {
-                        pulseToast("Keep at least one Administrator in Supabase.");
+                        pulseToast("Keep at least one Administrator.");
                         return;
                       }
                     }
@@ -76,13 +81,30 @@ export function RemoteTeamDirectorySection() {
                       display_name: patch.display_name,
                       org_role: patch.org_role,
                       seniority: patch.seniority,
+                      account_status: patch.account_status,
+                      approved_at: patch.account_status === "active" ? new Date().toISOString() : undefined,
                     });
                     if (!res.ok) {
                       pulseToast(res.message);
                       return;
                     }
-                    pulseToast("Saved to Supabase.");
+                    pulseToast("Saved.");
                     setEditingId(null);
+                    await reload();
+                    syncPageForAuthChange();
+                  }}
+                  onApprove={async () => {
+                    const sb = getSupabaseClient();
+                    if (!sb) return;
+                    const res = await updateProfileRow(sb, u.id, {
+                      account_status: "active",
+                      approved_at: new Date().toISOString(),
+                    });
+                    if (!res.ok) {
+                      pulseToast(res.message);
+                      return;
+                    }
+                    pulseToast(`Approved ${u.displayName}.`);
                     await reload();
                     syncPageForAuthChange();
                   }}
@@ -102,22 +124,30 @@ function RemoteRow({
   onEdit,
   onCancel,
   onSave,
+  onApprove,
 }: {
   user: RemoteProfile;
   editing: boolean;
   onEdit: () => void;
   onCancel: () => void;
-  onSave: (patch: { display_name?: string; org_role?: string; seniority?: string }) => void | Promise<void>;
+  onSave: (patch: { display_name?: string; org_role?: string; seniority?: string; account_status?: string }) => void | Promise<void>;
+  onApprove: () => void | Promise<void>;
 }) {
   const [draft, setDraft] = useState({
     displayName: user.displayName,
     orgRole: user.orgRole,
     seniority: user.seniority,
+    accountStatus: user.accountStatus,
   });
 
   useEffect(() => {
     if (editing) {
-      setDraft({ displayName: user.displayName, orgRole: user.orgRole, seniority: user.seniority });
+      setDraft({
+        displayName: user.displayName,
+        orgRole: user.orgRole,
+        seniority: user.seniority,
+        accountStatus: user.accountStatus,
+      });
     }
   }, [editing, user]);
 
@@ -128,10 +158,30 @@ function RemoteRow({
         <td style={{ padding: "10px 8px", color: "var(--ink-soft)" }}>{user.email}</td>
         <td style={{ padding: "10px 8px" }}>{SENIORITY_LABELS[user.seniority]}</td>
         <td style={{ padding: "10px 8px" }}>{SIMULATION_ROLE_LABELS[user.orgRole]}</td>
-        <td style={{ padding: "10px 0 10px 8px" }}>
+        <td style={{ padding: "10px 8px" }}>
+          <span className={`pill ${user.accountStatus === "pending" ? "amber" : "lime"}`}>
+            {ACCOUNT_STATUS_LABELS[user.accountStatus]}
+          </span>
+          {user.accountStatus === "pending" ? (
+            <span style={{ display: "block", marginTop: 4, color: "var(--ink-mute)", fontSize: 12 }}>
+              Requested {SIGNUP_ROLE_LABELS[user.requestedRole]}
+            </span>
+          ) : null}
+        </td>
+        <td style={{ padding: "10px 0 10px 8px", whiteSpace: "nowrap" }}>
           <button type="button" className="btn secondary" style={{ padding: "4px 10px", fontSize: 12 }} onClick={onEdit}>
             Edit
           </button>
+          {user.accountStatus === "pending" ? (
+            <button
+              type="button"
+              className="btn coral"
+              style={{ padding: "4px 10px", fontSize: 12, marginLeft: 6 }}
+              onClick={() => void onApprove()}
+            >
+              Approve
+            </button>
+          ) : null}
         </td>
       </tr>
     );
@@ -139,7 +189,7 @@ function RemoteRow({
 
   return (
     <tr style={{ borderBottom: "1px solid var(--rule)", verticalAlign: "top" }}>
-      <td colSpan={5} style={{ padding: "12px 0" }}>
+      <td colSpan={6} style={{ padding: "12px 0" }}>
         <div
           style={{
             display: "grid",
@@ -187,6 +237,18 @@ function RemoteRow({
               ))}
             </select>
           </div>
+          <div className="field" style={{ margin: 0 }}>
+            <label htmlFor={`rp-status-${user.id}`}>Access status</label>
+            <select
+              id={`rp-status-${user.id}`}
+              className="select"
+              value={draft.accountStatus}
+              onChange={(e) => setDraft((d) => ({ ...d, accountStatus: e.target.value as "pending" | "active" }))}
+            >
+              <option value="pending">{ACCOUNT_STATUS_LABELS.pending}</option>
+              <option value="active">{ACCOUNT_STATUS_LABELS.active}</option>
+            </select>
+          </div>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <button
               type="button"
@@ -196,6 +258,7 @@ function RemoteRow({
                   display_name: draft.displayName.trim(),
                   org_role: draft.orgRole,
                   seniority: draft.seniority,
+                  account_status: draft.accountStatus,
                 })
               }
             >
