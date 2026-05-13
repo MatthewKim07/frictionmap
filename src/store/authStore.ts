@@ -92,7 +92,7 @@ export type AuthPanelMode = "sign-in" | "sign-up";
 
 export type AuthResult = { ok: true; accountStatus: AccountStatus } | { ok: false; message: string };
 
-function remoteProfileToDirectoryUser(p: RemoteProfile): DirectoryUser {
+export function remoteProfileToDirectoryUser(p: RemoteProfile): DirectoryUser {
   return {
     id: p.id,
     displayName: p.displayName,
@@ -103,6 +103,18 @@ function remoteProfileToDirectoryUser(p: RemoteProfile): DirectoryUser {
     requestedRole: p.requestedRole,
     authMethods: ["password"],
   };
+}
+
+function sameRemoteProfile(a: RemoteProfile | null, b: RemoteProfile | null): boolean {
+  return (
+    a?.id === b?.id &&
+    a?.email === b?.email &&
+    a?.displayName === b?.displayName &&
+    a?.seniority === b?.seniority &&
+    a?.orgRole === b?.orgRole &&
+    a?.accountStatus === b?.accountStatus &&
+    a?.requestedRole === b?.requestedRole
+  );
 }
 
 export interface AuthStoreState {
@@ -173,7 +185,8 @@ export const useAuthStore = create<AuthStoreState>()(
 
       setLoginPanelOpen: (open, mode) => set({ loginPanelOpen: open, authPanelMode: mode ?? get().authPanelMode }),
 
-      setRemoteProfile: (profile) => set({ remoteProfile: profile }),
+      setRemoteProfile: (profile) =>
+        set((s) => (sameRemoteProfile(s.remoteProfile, profile) ? {} : { remoteProfile: profile })),
 
       signOut: () => {
         void getSupabaseClient()?.auth.signOut();
