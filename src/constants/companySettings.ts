@@ -3,13 +3,14 @@ import { TEAMS } from "@/constants/friction";
 
 export const DEFAULT_COMPANY_NAME = "Your organization";
 
-export const SIMULATION_ROLES = ["employee", "manager", "operations", "judge"] as const;
+export const SIMULATION_ROLES = ["employee", "manager", "operations", "admin", "judge"] as const;
 export type SimulationRole = (typeof SIMULATION_ROLES)[number];
 
 export const SIMULATION_ROLE_LABELS: Record<SimulationRole, string> = {
   employee: "Employee",
   manager: "Manager",
   operations: "Operations Leader",
+  admin: "Administrator",
   judge: "Judge Demo",
 };
 
@@ -34,7 +35,7 @@ export function defaultCompanySettings(): CompanySettingsSlice {
     defaultTeam: TEAMS[5] ?? "Operations",
     customTeams: [],
     hiddenBuiltinTeams: [],
-    simulationRole: "employee",
+    simulationRole: "admin",
   };
 }
 

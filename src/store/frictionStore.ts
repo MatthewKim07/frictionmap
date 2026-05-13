@@ -7,6 +7,7 @@ import {
   getEffectiveTeamOptions,
   mergeCompanySettings,
   sanitizeSimulationRole,
+  SIMULATION_ROLE_LABELS,
   type CompanySettingsSlice,
   type SimulationRole,
 } from "@/constants/companySettings";
@@ -38,11 +39,26 @@ import {
   replaceReports as repoReplaceReports,
   updateReport as repoUpdateReport,
 } from "@/lib/reportRepository";
+import { getEffectiveOrgRole, type AuthRoleSlice } from "@/lib/effectiveOrgRole";
+import {
+  canChangeIntegrationMocks,
+  canClearAllLocalAppData,
+  canEditBlendedHourlyRate,
+  canImportFrictionReports,
+  canLoadAlternateDemoScenario,
+  canOpenBusinessImpactReport,
+  canResetDemoReports,
+  canTriageRoadmapClusters,
+  defaultPageForRole,
+  roleMayAccessPage,
+} from "@/lib/roleAccess";
 import { generateRoadmapItems } from "@/lib/roadmap";
 import type { DataConnectionMode } from "@/lib/supabase";
+import { useAuthStore } from "@/store/authStore";
+import type { AppPage } from "@/types/appPage";
 import type { FrictionReport } from "@/types";
 
-export type AppPage = "overview" | "submit" | "insights" | "roadmap" | "integrations" | "settings";
+export type { AppPage } from "@/types/appPage";
 
 export type ToastState = { msg: string } | null;
 
@@ -56,6 +72,10 @@ export interface NewFrictionPayload {
   frequency: FrictionReport["frequency"];
   severity: FrictionReport["severity"];
   suggestion: string;
+}
+
+function clampPageToRole(page: AppPage, role: SimulationRole): AppPage {
+  return roleMayAccessPage(role, page) ? page : defaultPageForRole(role);
 }
 
 const LEGACY_STORAGE_KEY = "frictionmap-reports-v2";
@@ -262,6 +282,22 @@ interface FrictionStoreState {
   setIntegrationSettings: (partial: Partial<IntegrationSettings>) => void;
   /** Bulk-add reports (e.g. CSV import). Syncs replace to repository. */
   importReports: (incoming: FrictionReport[]) => void;
+
+  /** Re-clamp visible page when session / directory role changes (call from auth UI). */
+  syncPageForAuthChange: () => void;
+}
+
+function authRoleSlice(): AuthRoleSlice {
+  const a = useAuthStore.getState();
+  return {
+    sessionUserId: a.sessionUserId,
+    directoryUsers: a.directoryUsers,
+    remoteProfile: a.remoteProfile,
+  };
+}
+
+function effectiveSimulationRoleForFriction(get: () => FrictionStoreState): SimulationRole {
+  return getEffectiveOrgRole(authRoleSlice(), get().companySettings.simulationRole);
 }
 
 export const useFrictionStore = create<FrictionStoreState>()(
@@ -287,15 +323,38 @@ export const useFrictionStore = create<FrictionStoreState>()(
           const next = mergeCompanySettings(merged);
           const opts = getEffectiveTeamOptions(next);
           const defaultTeam = opts.includes(next.defaultTeam) ? next.defaultTeam : opts[0]!;
-          return { companySettings: { ...next, defaultTeam } };
+          const accessRole = getEffectiveOrgRole(authRoleSlice(), next.simulationRole);
+          return {
+            companySettings: { ...next, defaultTeam },
+            page: clampPageToRole(s.page, accessRole),
+          };
         }),
 
       setSimulationRole: (role) =>
+        set((s) => {
+          const simulationRole = sanitizeSimulationRole(role);
+          const nextSettings = mergeCompanySettings({ ...s.companySettings, simulationRole });
+          const accessRole = getEffectiveOrgRole(authRoleSlice(), nextSettings.simulationRole);
+          return {
+            companySettings: nextSettings,
+            page: clampPageToRole(s.page, accessRole),
+          };
+        }),
+
+      syncPageForAuthChange: () =>
         set((s) => ({
-          companySettings: { ...s.companySettings, simulationRole: sanitizeSimulationRole(role) },
+          page: clampPageToRole(s.page, effectiveSimulationRoleForFriction(() => s)),
         })),
 
       clearAllLocalData: () => {
+        const role = effectiveSimulationRoleForFriction(get);
+        if (!canClearAllLocalAppData(role)) {
+          get().pulseToast(
+            `Clearing all local data is restricted to administrators. Current role: ${SIMULATION_ROLE_LABELS[role]}.`,
+          );
+          return;
+        }
+        useAuthStore.getState().signOut();
         try {
           window.localStorage.removeItem(STORAGE_KEY_PRIMARY);
           window.localStorage.removeItem(LEGACY_STORAGE_KEY);
@@ -351,9 +410,25 @@ export const useFrictionStore = create<FrictionStoreState>()(
         get().pulseToast(n);
       },
 
-      setPage: (page) => set({ page }),
+      setPage: (page) => {
+        const role = effectiveSimulationRoleForFriction(get);
+        if (!roleMayAccessPage(role, page)) {
+          get().pulseToast(
+            `That area is not enabled for the ${SIMULATION_ROLE_LABELS[role]} role. An administrator can change organization access in Settings.`,
+          );
+          set({ page: clampPageToRole(get().page, role) });
+          return;
+        }
+        set({ page });
+      },
 
-      setImpactReportModalOpen: (open) => set({ impactReportModalOpen: open }),
+      setImpactReportModalOpen: (open) => {
+        if (open && !canOpenBusinessImpactReport(effectiveSimulationRoleForFriction(get))) {
+          get().pulseToast("The Business Impact Report is not available for the Employee role.");
+          return;
+        }
+        set({ impactReportModalOpen: open });
+      },
 
       setFilters: (partial) =>
         set((s) => ({
@@ -364,7 +439,14 @@ export const useFrictionStore = create<FrictionStoreState>()(
 
       clearPersistRecoverNotice: () => set({ persistRecoverNotice: null }),
 
-      setHourlyRate: (value) => set({ hourlyRate: sanitizeHourlyRate(value) }),
+      setHourlyRate: (value) => {
+        const role = effectiveSimulationRoleForFriction(get);
+        if (!canEditBlendedHourlyRate(role)) {
+          get().pulseToast("Only managers and above can change the blended hourly rate.");
+          return;
+        }
+        set({ hourlyRate: sanitizeHourlyRate(value) });
+      },
 
       initializeReports: async () => {
         set({ isLoadingReports: true, reportError: null });
@@ -399,6 +481,11 @@ export const useFrictionStore = create<FrictionStoreState>()(
       },
 
       loadDemoScenario: (id) => {
+        const role = effectiveSimulationRoleForFriction(get);
+        if (!canLoadAlternateDemoScenario(role)) {
+          get().pulseToast("Loading a different demo scenario is restricted to Operations, Administrator, or Judge Demo.");
+          return;
+        }
         const safe = sanitizeScenarioId(id);
         const nextReports = cloneScenarioReports(safe);
         set({
@@ -445,6 +532,11 @@ export const useFrictionStore = create<FrictionStoreState>()(
       },
 
       setClusterReportsStatus: (category, process, status) => {
+        const role = effectiveSimulationRoleForFriction(get);
+        if (!canTriageRoadmapClusters(role)) {
+          get().pulseToast("Updating roadmap cluster status requires a Manager role or higher.");
+          return;
+        }
         set((s) => ({
           reports: s.reports.map((r) =>
             r.category === category && r.process === process ? { ...r, status } : r,
@@ -468,6 +560,11 @@ export const useFrictionStore = create<FrictionStoreState>()(
       },
 
       resetDemoData: () => {
+        const role = effectiveSimulationRoleForFriction(get);
+        if (!canResetDemoReports(role)) {
+          get().pulseToast("Resetting demo data is not available for the Employee role.");
+          return;
+        }
         const id = get().demoScenarioId;
         set({
           reports: cloneScenarioReports(id),
@@ -481,12 +578,23 @@ export const useFrictionStore = create<FrictionStoreState>()(
         get().pulseToast("Reports reset to the current demo scenario baseline.");
       },
 
-      setIntegrationSettings: (partial) =>
+      setIntegrationSettings: (partial) => {
+        const role = effectiveSimulationRoleForFriction(get);
+        if (!canChangeIntegrationMocks(role)) {
+          get().pulseToast("Integration settings can only be changed from the Integrations page (Operations role or higher).");
+          return;
+        }
         set((s) => ({
           integrationSettings: { ...s.integrationSettings, ...partial },
-        })),
+        }));
+      },
 
       importReports: (incoming) => {
+        const role = effectiveSimulationRoleForFriction(get);
+        if (!canImportFrictionReports(role)) {
+          get().pulseToast("Importing reports requires an Operations, Administrator, or Judge Demo role.");
+          return;
+        }
         if (!incoming.length) return;
         set((s) => ({
           reports: [...incoming, ...s.reports],
@@ -568,6 +676,7 @@ export const useFrictionStore = create<FrictionStoreState>()(
         const demoScenarioId = sanitizeScenarioId(saved.demoScenarioId);
         const integrationSettings = sanitizeIntegrationSettings(saved.integrationSettings);
         const companySettings = mergeCompanySettings(saved.companySettings);
+        const accessRole = getEffectiveOrgRole(authRoleSlice(), companySettings.simulationRole);
 
         return {
           ...current,
@@ -576,19 +685,25 @@ export const useFrictionStore = create<FrictionStoreState>()(
           demoScenarioId,
           integrationSettings,
           companySettings,
+          page: clampPageToRole(current.page, accessRole),
           persistRecoverNotice: recoverNotice,
         };
       },
       migrate: (oldState: unknown, fromVersion: number) => {
         const p = typeof oldState === "object" && oldState !== null ? (oldState as Record<string, unknown>) : {};
         const { reports } = sanitizeReportsArray(p.reports);
+        let companySettings =
+          fromVersion >= 5 ? mergeCompanySettings(p.companySettings) : defaultCompanySettings();
+        if (fromVersion < 6) {
+          companySettings = { ...companySettings, simulationRole: "admin" };
+        }
         return {
           reports,
           hourlyRate: sanitizeHourlyRate(p.hourlyRate),
           demoScenarioId: sanitizeScenarioId(p.demoScenarioId),
           integrationSettings:
             fromVersion >= 3 ? sanitizeIntegrationSettings(p.integrationSettings) : defaultIntegrationSettings(),
-          companySettings: fromVersion >= 5 ? mergeCompanySettings(p.companySettings) : defaultCompanySettings(),
+          companySettings,
         };
       },
     },
