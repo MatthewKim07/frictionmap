@@ -216,40 +216,6 @@ function TimeChips({ onSelect }: { onSelect: (v: string) => void }) {
   );
 }
 
-// ─── optional field toggle ──────────────────────────────────────────────────
-
-function OptionalToggle({
-  label,
-  open,
-  onToggle,
-}: {
-  label: string;
-  open: boolean;
-  onToggle: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onToggle}
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        gap: 5,
-        fontSize: 13,
-        color: open ? "var(--ink-soft)" : "var(--ink-mute)",
-        background: "none",
-        border: "none",
-        cursor: "pointer",
-        padding: 0,
-        fontWeight: open ? 500 : 400,
-      }}
-    >
-      <span style={{ fontSize: 16, lineHeight: 1 }}>{open ? "−" : "＋"}</span>
-      {label}
-    </button>
-  );
-}
-
 // ─── report list row ────────────────────────────────────────────────────────
 
 function ReportRow({ r, hourlyRate, currencyCode }: { r: FrictionReport; hourlyRate: number; currencyCode: string }) {
@@ -324,15 +290,25 @@ export function SubmitPage() {
   const [frequencyMode, setFrequencyMode] = useState<"once" | "recurring">("recurring");
   const [recurringChoice, setRecurringChoice] = useState<RecurringChoice>("weekly");
   const [customFreqLabel, setCustomFreqLabel] = useState("");
-  const [showSuggestion, setShowSuggestion] = useState(false);
-  const [showAttachment, setShowAttachment] = useState(false);
-  const [attachmentUrl, setAttachmentUrl] = useState("");
-  const [attachedFile, setAttachedFile] = useState<{ name: string; objectUrl: string } | null>(null);
+  const [attachmentUrls, setAttachmentUrls] = useState<string[]>([""]);
+  const updateAttachmentUrl = (i: number, val: string) => {
+    setAttachmentUrls((prev) => {
+      const next = [...prev];
+      next[i] = val;
+      if (i === prev.length - 1 && val) next.push("");
+      return next;
+    });
+    if (val) setAttachedFiles([]);
+  };
+  const removeAttachmentUrl = (i: number) =>
+    setAttachmentUrls((prev) => prev.length === 1 ? [""] : prev.filter((_, idx) => idx !== i));
+  const [attachedFiles, setAttachedFiles] = useState<{ name: string; objectUrl: string }[]>([]);
 
   useEffect(() => {
-    const url = attachedFile?.objectUrl;
-    return () => { if (url) URL.revokeObjectURL(url); };
-  }, [attachedFile]);
+    return () => { attachedFiles.forEach((f) => URL.revokeObjectURL(f.objectUrl)); };
+  // only revoke on unmount
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const effectiveFrequency: Frequency = frequencyMode === "once"
     ? "once"
@@ -479,7 +455,10 @@ export function SubmitPage() {
       frequencyLabel: effectiveFreqLabel,
       severity: form.severity,
       suggestion: form.suggestion.trim(),
-      attachmentUrl: attachedFile?.objectUrl ?? (attachmentUrl.trim() || undefined),
+      attachmentUrl: [
+        ...attachedFiles.map((f) => f.objectUrl),
+        ...attachmentUrls.filter((u) => u.trim()),
+      ].join("\n") || undefined,
     };
 
     setIsSubmitting(true);
@@ -507,10 +486,8 @@ export function SubmitPage() {
     setFrequencyMode("recurring");
     setRecurringChoice("weekly");
     setCustomFreqLabel("");
-    setShowSuggestion(false);
-    setShowAttachment(false);
-    setAttachmentUrl("");
-    setAttachedFile(null);
+    setAttachmentUrls([""]);
+    setAttachedFiles([]);
     setFormState({
       title: "",
       description: "",
@@ -992,144 +969,138 @@ export function SubmitPage() {
               )}
             </div>
 
-            {/* 9 & 10. Optional fields */}
-            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-              <OptionalToggle
-                label="Add a fix suggestion"
-                open={showSuggestion}
-                onToggle={() => setShowSuggestion((v) => !v)}
+            {/* 9. Fix suggestion — always visible, optional */}
+            <div className="field">
+              <label htmlFor="fm-suggestion">
+                Fix suggestion <span className="hint">(Optional)</span>
+              </label>
+              <textarea
+                id="fm-suggestion"
+                className="textarea"
+                value={form.suggestion}
+                onChange={(e) => set("suggestion", e.target.value)}
+                placeholder="What would make this easier next time?"
+                rows={3}
               />
-              <AnimatePresence>
-                {showSuggestion && (
-                  <motion.div
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: "auto" }}
-                    exit={{ opacity: 0, height: 0 }}
-                    transition={{ duration: 0.15 }}
-                    style={{ overflow: "hidden" }}
-                  >
-                    <textarea
-                      id="fm-suggestion"
-                      className="textarea"
-                      value={form.suggestion}
-                      onChange={(e) => set("suggestion", e.target.value)}
-                      placeholder="What would make this easier next time?"
-                      rows={3}
-                      style={{ width: "100%", boxSizing: "border-box" }}
-                    />
-                  </motion.div>
-                )}
-              </AnimatePresence>
+            </div>
 
-              <OptionalToggle
-                label="Attach a link or file"
-                open={showAttachment}
-                onToggle={() => setShowAttachment((v) => !v)}
-              />
-              <AnimatePresence>
-                {showAttachment && (
-                  <motion.div
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: "auto" }}
-                    exit={{ opacity: 0, height: 0 }}
-                    transition={{ duration: 0.15 }}
-                    style={{ overflow: "hidden", display: "flex", flexDirection: "column", gap: 10 }}
-                  >
-                    <input
-                      className="input"
-                      type="url"
-                      value={attachmentUrl}
-                      onChange={(e) => {
-                        setAttachmentUrl(e.target.value);
-                        if (e.target.value) setAttachedFile(null);
+            {/* 10. Attachment — always visible, optional */}
+            <div className="field">
+              <label>
+                Attachments <span className="hint">(Optional)</span>
+              </label>
+              {attachmentUrls.map((url, i) => (
+                <div key={i} style={{ display: "flex", gap: 6 }}>
+                  <input
+                    className="input"
+                    type="url"
+                    value={url}
+                    onChange={(e) => updateAttachmentUrl(i, e.target.value)}
+                    placeholder="https://… paste a link"
+                    disabled={attachedFiles.length > 0}
+                    style={{ flex: 1 }}
+                  />
+                  {(attachmentUrls.length > 1 || url) && (
+                    <button
+                      type="button"
+                      onClick={() => removeAttachmentUrl(i)}
+                      style={{
+                        flexShrink: 0,
+                        padding: "0 10px",
+                        background: "none",
+                        border: "1px solid var(--rule-strong)",
+                        borderRadius: "var(--radius-sm)",
+                        cursor: "pointer",
+                        fontSize: 14,
+                        color: "var(--ink-mute)",
                       }}
-                      placeholder="https://… paste a link"
-                      style={{ width: "100%", boxSizing: "border-box" }}
-                      disabled={!!attachedFile}
-                    />
-                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                      <div style={{ flex: 1, height: 1, background: "var(--rule)" }} />
-                      <span style={{ fontSize: 12, color: "var(--ink-mute)" }}>or</span>
-                      <div style={{ flex: 1, height: 1, background: "var(--rule)" }} />
+                      aria-label="Remove link"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+              ))}
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <div style={{ flex: 1, height: 1, background: "var(--rule)" }} />
+                <span style={{ fontSize: 12, color: "var(--ink-mute)" }}>or</span>
+                <div style={{ flex: 1, height: 1, background: "var(--rule)" }} />
+              </div>
+              {attachedFiles.length > 0 && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  {attachedFiles.map((f, i) => (
+                    <div
+                      key={i}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 8,
+                        padding: "9px 12px",
+                        borderRadius: "var(--radius-sm)",
+                        border: "1px solid var(--rule-strong)",
+                        background: "var(--paper-2)",
+                      }}
+                    >
+                      <span style={{ fontSize: 13, color: "var(--ink)", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        📎 {f.name}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          URL.revokeObjectURL(f.objectUrl);
+                          setAttachedFiles((prev) => prev.filter((_, idx) => idx !== i));
+                        }}
+                        style={{ fontSize: 12, color: "var(--ink-mute)", background: "none", border: "none", cursor: "pointer", padding: "0 2px", flexShrink: 0 }}
+                        aria-label="Remove file"
+                      >
+                        ✕
+                      </button>
                     </div>
-                    {attachedFile ? (
-                      <div
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 8,
-                          padding: "9px 12px",
-                          borderRadius: "var(--radius-sm)",
-                          border: "1px solid var(--rule-strong)",
-                          background: "var(--paper-2)",
-                        }}
-                      >
-                        <span style={{ fontSize: 13, color: "var(--ink)", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                          📎 {attachedFile.name}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => setAttachedFile(null)}
-                          style={{
-                            fontSize: 12,
-                            color: "var(--ink-mute)",
-                            background: "none",
-                            border: "none",
-                            cursor: "pointer",
-                            padding: "0 2px",
-                            flexShrink: 0,
-                          }}
-                          aria-label="Remove file"
-                        >
-                          ✕
-                        </button>
-                      </div>
-                    ) : (
-                      <label
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          gap: 8,
-                          padding: "10px 16px",
-                          borderRadius: "var(--radius-sm)",
-                          border: "1.5px dashed var(--rule-strong)",
-                          background: "var(--paper)",
-                          cursor: "pointer",
-                          fontSize: 13,
-                          color: "var(--ink-mute)",
-                          transition: "border-color 0.14s ease, color 0.14s ease",
-                        }}
-                        onMouseEnter={(e) => {
-                          (e.currentTarget as HTMLElement).style.borderColor = "var(--ink-mute)";
-                          (e.currentTarget as HTMLElement).style.color = "var(--ink-soft)";
-                        }}
-                        onMouseLeave={(e) => {
-                          (e.currentTarget as HTMLElement).style.borderColor = "var(--rule-strong)";
-                          (e.currentTarget as HTMLElement).style.color = "var(--ink-mute)";
-                        }}
-                      >
-                        <span>📎</span>
-                        <span>Choose a file</span>
-                        <input
-                          type="file"
-                          style={{ display: "none" }}
-                          onChange={(e) => {
-                            const file = e.target.files?.[0];
-                            if (!file) return;
-                            const objectUrl = URL.createObjectURL(file);
-                            setAttachedFile({ name: file.name, objectUrl });
-                            setAttachmentUrl("");
-                          }}
-                        />
-                      </label>
-                    )}
-                    <p style={{ margin: 0, fontSize: 11, color: "var(--ink-mute)" }}>
-                      File attachments are session-only and not uploaded to a server.
-                    </p>
-                  </motion.div>
-                )}
-              </AnimatePresence>
+                  ))}
+                </div>
+              )}
+              <label
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 8,
+                  padding: "10px 16px",
+                  borderRadius: "var(--radius-sm)",
+                  border: "1.5px dashed var(--rule-strong)",
+                  background: "var(--paper)",
+                  cursor: "pointer",
+                  fontSize: 13,
+                  color: "var(--ink-mute)",
+                  transition: "border-color 0.14s ease, color 0.14s ease",
+                }}
+                onMouseEnter={(e) => {
+                  (e.currentTarget as HTMLElement).style.borderColor = "var(--ink-mute)";
+                  (e.currentTarget as HTMLElement).style.color = "var(--ink-soft)";
+                }}
+                onMouseLeave={(e) => {
+                  (e.currentTarget as HTMLElement).style.borderColor = "var(--rule-strong)";
+                  (e.currentTarget as HTMLElement).style.color = "var(--ink-mute)";
+                }}
+              >
+                <span>📎</span>
+                <span>{attachedFiles.length > 0 ? "Add more files" : "Choose a file"}</span>
+                <input
+                  type="file"
+                  multiple
+                  style={{ display: "none" }}
+                  onChange={(e) => {
+                    const files = Array.from(e.target.files ?? []);
+                    if (!files.length) return;
+                    const newEntries = files.map((file) => ({ name: file.name, objectUrl: URL.createObjectURL(file) }));
+                    setAttachedFiles((prev) => [...prev, ...newEntries]);
+                    setAttachmentUrls([""]);
+                  }}
+                />
+              </label>
+              <p style={{ margin: 0, fontSize: 11, color: "var(--ink-mute)" }}>
+                File attachments are session-only and not uploaded to a server.
+              </p>
             </div>
 
             {/* submit row */}
