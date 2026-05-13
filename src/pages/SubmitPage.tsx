@@ -279,7 +279,7 @@ export function SubmitPage() {
   const [form, setFormState] = useState({
     title: "",
     description: "",
-    category: FRICTION_CATEGORIES[0] as FrictionCategory,
+    category: "" as FrictionCategory,
     team: "Operations" as Team,
     process: "",
     timeLostHours: "",
@@ -491,7 +491,7 @@ export function SubmitPage() {
     setFormState({
       title: "",
       description: "",
-      category: FRICTION_CATEGORIES[0] as FrictionCategory,
+      category: "" as FrictionCategory,
       team: (teamOptions.includes(companySettings.defaultTeam)
         ? companySettings.defaultTeam
         : teamOptions[0] ?? "Operations") as Team,
@@ -783,11 +783,12 @@ export function SubmitPage() {
                 onChange={(e) => set("category", e.target.value as FrictionCategory)}
                 aria-invalid={!!errors.category}
               >
+                <option value="" disabled>— Select category —</option>
                 {FRICTION_CATEGORIES.map((c) => (
                   <option key={c} value={c}>{c}</option>
                 ))}
               </select>
-              <p className="hint" style={{ marginTop: 5 }}>{FRICTION_CATEGORY_DESCRIPTIONS[form.category]}</p>
+              {form.category && <p className="hint" style={{ marginTop: 5 }}>{FRICTION_CATEGORY_DESCRIPTIONS[form.category]}</p>}
               {errors.category && (
                 <div className="field-error" role="alert">{errors.category}</div>
               )}
