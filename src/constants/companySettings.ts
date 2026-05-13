@@ -26,6 +26,8 @@ export interface CompanySettingsSlice {
   /** Builtin `TEAMS` entries hidden from pickers (not deleted from data). */
   hiddenBuiltinTeams: string[];
   simulationRole: SimulationRole;
+  /** UTC calendar day (YYYY-MM-DD) when the org started tracking friction — drives resolution history years. */
+  organizationCreatedAt?: string;
 }
 
 export function defaultCompanySettings(): CompanySettingsSlice {
@@ -94,10 +96,21 @@ export function sanitizeSimulationRole(raw: unknown): SimulationRole {
   return SIMULATION_ROLES.includes(raw as SimulationRole) ? (raw as SimulationRole) : "employee";
 }
 
+/** YYYY-MM-DD (UTC) or undefined if invalid / absent. */
+export function sanitizeOrganizationCreatedAt(raw: unknown): string | undefined {
+  if (typeof raw !== "string") return undefined;
+  const t = raw.trim().slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(t)) return undefined;
+  const ms = new Date(`${t}T12:00:00.000Z`).getTime();
+  if (!Number.isFinite(ms)) return undefined;
+  return t;
+}
+
 export function mergeCompanySettings(partial: unknown): CompanySettingsSlice {
   const base = defaultCompanySettings();
   if (typeof partial !== "object" || partial === null || Array.isArray(partial)) return base;
   const o = partial as Record<string, unknown>;
+  const organizationCreatedAt = sanitizeOrganizationCreatedAt(o.organizationCreatedAt);
   return {
     companyName: sanitizeCompanyName(o.companyName),
     currencyCode: sanitizeCurrencyCode(o.currencyCode),
@@ -105,6 +118,7 @@ export function mergeCompanySettings(partial: unknown): CompanySettingsSlice {
     customTeams: sanitizeCustomTeams(o.customTeams),
     hiddenBuiltinTeams: sanitizeHiddenBuiltinTeams(o.hiddenBuiltinTeams),
     simulationRole: sanitizeSimulationRole(o.simulationRole),
+    ...(organizationCreatedAt ? { organizationCreatedAt } : {}),
   };
 }
 

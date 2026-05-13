@@ -6,6 +6,7 @@ import {
   defaultCompanySettings,
   getEffectiveTeamOptions,
   mergeCompanySettings,
+  sanitizeOrganizationCreatedAt,
   sanitizeSimulationRole,
   SIMULATION_ROLE_LABELS,
   type CompanySettingsSlice,
@@ -53,6 +54,7 @@ import {
   roleMayAccessPage,
 } from "@/lib/roleAccess";
 import { generateRoadmapItems } from "@/lib/roadmap";
+import { getDefaultOrganizationCreatedAtFromReports, shouldResetStaleOrganizationStart } from "@/lib/resolutionContributionCalendar";
 import { enrichFrictionReportFromStorage, mergeReportWithTimestampFields, applyStatusTransition } from "@/lib/reportStatusTimestamps";
 import type { DataConnectionMode } from "@/lib/supabase";
 import { useAuthStore } from "@/store/authStore";
@@ -699,7 +701,13 @@ export const useFrictionStore = create<FrictionStoreState>()(
         const hourlyRate = sanitizeHourlyRate(saved.hourlyRate);
         const demoScenarioId = sanitizeScenarioId(saved.demoScenarioId);
         const integrationSettings = sanitizeIntegrationSettings(saved.integrationSettings);
-        const companySettings = mergeCompanySettings(saved.companySettings);
+        let companySettings = mergeCompanySettings(saved.companySettings);
+        const autoOrgStart = getDefaultOrganizationCreatedAtFromReports(reports);
+        if (!companySettings.organizationCreatedAt) {
+          companySettings = { ...companySettings, organizationCreatedAt: autoOrgStart };
+        } else if (shouldResetStaleOrganizationStart(companySettings.organizationCreatedAt, reports)) {
+          companySettings = { ...companySettings, organizationCreatedAt: autoOrgStart };
+        }
         const accessRole = getEffectiveOrgRole(authRoleSlice(), companySettings.simulationRole);
 
         return {
@@ -720,6 +728,16 @@ export const useFrictionStore = create<FrictionStoreState>()(
           fromVersion >= 5 ? mergeCompanySettings(p.companySettings) : defaultCompanySettings();
         if (fromVersion < 6) {
           companySettings = { ...companySettings, simulationRole: "admin" };
+        }
+        if (fromVersion < 8) {
+          const fallback = getDefaultOrganizationCreatedAtFromReports(migratedReports);
+          const existing = sanitizeOrganizationCreatedAt(
+            (companySettings as CompanySettingsSlice).organizationCreatedAt,
+          );
+          companySettings = {
+            ...companySettings,
+            organizationCreatedAt: existing ?? fallback,
+          };
         }
         return {
           reports: migratedReports,

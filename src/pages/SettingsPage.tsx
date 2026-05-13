@@ -12,6 +12,7 @@ import { TeamDirectorySection } from "@/components/settings/TeamDirectorySection
 import { canAccessSettingsTab } from "@/lib/roleAccess";
 import { useEffectiveOrgRole } from "@/hooks/useEffectiveOrgRole";
 import { isSupabaseConfigured } from "@/lib/supabase";
+import { getDefaultOrganizationCreatedAtFromReports } from "@/lib/resolutionAnalytics";
 import { useFrictionStore } from "@/store/frictionStore";
 
 export function SettingsPage() {
@@ -19,12 +20,15 @@ export function SettingsPage() {
   const setCompanySettings = useFrictionStore((s) => s.setCompanySettings);
   const hourlyRate = useFrictionStore((s) => s.hourlyRate);
   const setHourlyRate = useFrictionStore((s) => s.setHourlyRate);
+  const reports = useFrictionStore((s) => s.reports);
 
   const effectiveRole = useEffectiveOrgRole();
 
   const [companyDraft, setCompanyDraft] = useState(companySettings.companyName);
   const [rateDraft, setRateDraft] = useState(String(hourlyRate));
   const [newTeamDraft, setNewTeamDraft] = useState("");
+  const orgFallback = useMemo(() => getDefaultOrganizationCreatedAtFromReports(reports), [reports]);
+  const [orgStartDraft, setOrgStartDraft] = useState(companySettings.organizationCreatedAt ?? orgFallback);
 
   useEffect(() => {
     setCompanyDraft(companySettings.companyName);
@@ -33,6 +37,10 @@ export function SettingsPage() {
   useEffect(() => {
     setRateDraft(String(hourlyRate));
   }, [hourlyRate]);
+
+  useEffect(() => {
+    setOrgStartDraft(companySettings.organizationCreatedAt ?? orgFallback);
+  }, [companySettings.organizationCreatedAt, orgFallback]);
 
   const teamOptions = useMemo(() => getEffectiveTeamOptions(companySettings), [companySettings]);
 
@@ -52,6 +60,18 @@ export function SettingsPage() {
 
   const commitCompanyName = () => {
     setCompanySettings({ companyName: companyDraft });
+  };
+
+  const commitOrgStartDate = () => {
+    const t = orgStartDraft.trim().slice(0, 10);
+    if (!t) {
+      setCompanySettings({ organizationCreatedAt: undefined });
+      return;
+    }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(t)) return;
+    const ms = new Date(`${t}T12:00:00.000Z`).getTime();
+    if (!Number.isFinite(ms)) return;
+    setCompanySettings({ organizationCreatedAt: t });
   };
 
   const commitRate = () => {
@@ -125,6 +145,23 @@ export function SettingsPage() {
             />
             <p className="hint" style={{ marginTop: 6 }}>
               Shown in the header and in rollout copy. FrictionMap stays the product name.
+            </p>
+          </div>
+          <div className="field" style={{ marginTop: 16 }}>
+            <label htmlFor="settings-org-start">Organization start date</label>
+            <input
+              id="settings-org-start"
+              className="input"
+              type="date"
+              value={orgStartDraft}
+              onChange={(e) => setOrgStartDraft(e.target.value)}
+              onBlur={commitOrgStartDate}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") commitOrgStartDate();
+              }}
+            />
+            <p className="hint" style={{ marginTop: 6 }}>
+              UTC calendar day when you started tracking friction here. Controls the first year in Insights → Resolution Activity. Clear the field to reset to an automatic default from your data.
             </p>
           </div>
         </section>
