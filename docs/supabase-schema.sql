@@ -28,6 +28,9 @@ create table if not exists public.app_settings (
   updated_at timestamptz not null default now()
 );
 
+-- Optional: when FrictionMap syncs org metadata to Supabase, store the first activity year anchor.
+alter table public.app_settings add column if not exists organization_created_at date;
+
 create index if not exists idx_friction_reports_category on public.friction_reports(category);
 create index if not exists idx_friction_reports_team on public.friction_reports(team);
 create index if not exists idx_friction_reports_status on public.friction_reports(status);
