@@ -13,6 +13,7 @@ import {
   getTeamMonthlyCosts,
 } from "@/lib/frictionCalculations";
 import { generateRoadmapItems } from "@/lib/roadmap";
+import { computeSavingsAnalytics } from "@/lib/savingsAnalytics";
 import type { DashboardMetrics, DerivedRoadmapItem, FrictionReport } from "@/types";
 
 export type BusinessImpactReportTone = "executive" | "technical" | "operations";
@@ -35,6 +36,10 @@ export interface BusinessImpactReportStats {
   topCategoryLabel: string;
   highestProcessLabel: string;
   roadmapClusterCount: number;
+  potentialTop3MonthlySavings: number;
+  resolvedMonthlySavingsEstimate: number;
+  remainingMonthlyLeakageEstimate: number;
+  percentCostAddressed: number;
 }
 
 export interface BusinessImpactReportResult {
@@ -168,6 +173,30 @@ function generateSavingsSection(metrics: DashboardMetrics, currency: AppCurrency
   return `## Estimated Savings Opportunity\n\nIf the modeled drag were fully addressed, teams could recover up to **${formatCurrency(metrics.monthlyCostLost, currency)}** per month, or about **${formatCurrency(metrics.annualizedCostLost, currency)}** annualized, based on current reports and the configured hourly rate.\n`;
 }
 
+function generateSavingsTrackingSection(
+  savings: ReturnType<typeof computeSavingsAnalytics>,
+  currency: AppCurrencyCode = DEFAULT_APP_CURRENCY,
+): string {
+  const top3 = formatCurrency(savings.potentialTop3MonthlySavings, currency);
+  const resolved = formatCurrency(savings.resolvedMonthlyCost, currency);
+  const remaining = formatCurrency(savings.remainingOpenMonthlyCost, currency);
+  const crit = formatCurrency(savings.potentialCriticalMonthlySavings, currency);
+  return [
+    "## Savings tracking (estimated)",
+    "",
+    "_Figures below are directional models from submitted friction reports and roadmap clusters — not audited financial statements._",
+    "",
+    `- **Potential savings (top 3 roadmap clusters):** ~${top3}/month if those bottlenecks were fully resolved.`,
+    `- **Potential savings (Critical-ranked clusters only):** ~${crit}/month under the same assumption.`,
+    `- **Resolved savings estimate:** ~${resolved}/month attributed to reports currently marked **Resolved** (${savings.resolvedReportCount} ${savings.resolvedReportCount === 1 ? "report" : "reports"}).`,
+    `- **Remaining open leakage estimate:** ~${remaining}/month from non-resolved reports in this export.`,
+    `- **Share of modeled cost marked resolved:** ~${savings.percentCostAddressed}% (resolved estimate ÷ total modeled monthly leakage).`,
+    "",
+    "Use this block to prioritize operational fixes and to sanity-check whether resolved work is showing up in the data.",
+    "",
+  ].join("\n");
+}
+
 /**
  * Builds a markdown Business Impact Report from live reports (no fabricated data).
  * Returns `null` when there are no reports.
@@ -189,6 +218,7 @@ export function generateBusinessImpactReport(
   const highestProcess = getHighestCostProcess(reports);
   const roadmapItems = generateRoadmapItems(reports, hourlyRate, currency, undefined);
   const roadmapTop = roadmapItems[0];
+  const savingsModel = computeSavingsAnalytics(reports, hourlyRate, roadmapItems);
 
   const stats: BusinessImpactReportStats = {
     reportCount: metrics.reportCount,
@@ -200,6 +230,10 @@ export function generateBusinessImpactReport(
     topCategoryLabel: metrics.topCategory ?? "—",
     highestProcessLabel: highestProcess.process || "—",
     roadmapClusterCount: roadmapItems.length,
+    potentialTop3MonthlySavings: savingsModel.potentialTop3MonthlySavings,
+    resolvedMonthlySavingsEstimate: savingsModel.resolvedMonthlyCost,
+    remainingMonthlyLeakageEstimate: savingsModel.remainingOpenMonthlyCost,
+    percentCostAddressed: savingsModel.percentCostAddressed,
   };
 
   const exec = generateExecutiveSummary(metrics, roadmapTop, highestProcess, tone, currency);
@@ -209,6 +243,7 @@ export function generateBusinessImpactReport(
   const bottlenecks = generateTopBottlenecksSection(roadmapItems, currency);
   const fixes = generateRecommendedFixesSection(roadmapItems);
   const savings = generateSavingsSection(metrics, currency);
+  const savingsTracking = generateSavingsTrackingSection(savingsModel, currency);
   const next = generateNextStepsSection(roadmapItems, tone, currency);
 
   const markdown = [
@@ -231,6 +266,8 @@ export function generateBusinessImpactReport(
     fixes,
     "",
     savings,
+    "",
+    savingsTracking,
     "",
     next,
   ].join("\n");

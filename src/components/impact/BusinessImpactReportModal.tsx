@@ -190,6 +190,13 @@ export function BusinessImpactReportModal() {
                     </span>
                     <span className="modal-stat-pill">{formatHours(result.stats.monthlyHoursLost)}/mo</span>
                     <span className="modal-stat-pill">{formatCurrency(result.stats.monthlyCostLeakage, currencyCode)}/mo</span>
+                    <span className="modal-stat-pill">
+                      Top 3 potential ~{formatCurrency(result.stats.potentialTop3MonthlySavings, currencyCode)}/mo
+                    </span>
+                    <span className="modal-stat-pill">
+                      Resolved ~{formatCurrency(result.stats.resolvedMonthlySavingsEstimate, currencyCode)}/mo
+                    </span>
+                    <span className="modal-stat-pill">{result.stats.percentCostAddressed}% addressed</span>
                     <span className="modal-stat-pill">{result.stats.roadmapClusterCount} clusters</span>
                     <span className="modal-stat-pill">{result.stats.openCount} open</span>
                   </div>
