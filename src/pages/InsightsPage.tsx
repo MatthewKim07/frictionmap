@@ -37,6 +37,7 @@ import {
   getTeamMonthlyCosts,
 } from "@/lib/frictionCalculations";
 import { generateRoadmapItems } from "@/lib/roadmap";
+import { getOrganizationStartDate } from "@/lib/resolutionAnalytics";
 import {
   buildImpactFunnel,
   buildReportSubmissionTrend,
@@ -88,6 +89,10 @@ export function InsightsPage() {
   }, [companySettings, reports]);
 
   const filtered = useMemo(() => filterReports(reports, filters), [reports, filters]);
+  const organizationStartDate = useMemo(
+    () => getOrganizationStartDate(companySettings, reports),
+    [companySettings, reports],
+  );
 
   const hasAnyReports = reports.length > 0;
   const isFilteredEmpty = hasAnyReports && filtered.length === 0;
@@ -434,7 +439,12 @@ export function InsightsPage() {
         <p style={{ margin: 0, fontSize: 15, color: "var(--ink-soft)", lineHeight: 1.6 }}>{summaryText}</p>
       </motion.div>
 
-      <ResolutionActivity reports={filtered} hourlyRate={hourlyRate} currencyCode={currencyCode} />
+      <ResolutionActivity
+        reports={filtered}
+        hourlyRate={hourlyRate}
+        currencyCode={currencyCode}
+        organizationStartDate={organizationStartDate}
+      />
 
       <section className="card" style={{ marginBottom: 24, padding: "20px 22px" }} aria-labelledby="advanced-analytics-heading">
         <h2 id="advanced-analytics-heading" style={{ fontSize: 18, marginBottom: 10 }}>
