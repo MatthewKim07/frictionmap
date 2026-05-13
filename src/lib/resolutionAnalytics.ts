@@ -1,37 +1,26 @@
 import { calculateMonthlyCost, calculateMonthlyHours } from "@/lib/frictionCalculations";
+import {
+  buildContributionCalendar,
+  contributionTooltipText,
+  dateKeyUtc,
+  formatUtcDateKeyLong,
+  getContributionLevel,
+  getResolutionActivityByDay,
+  getResolvedReports,
+  resolutionDateKeyForReport,
+  type ContributionCalendarCell,
+  type HeatmapCell,
+  type ResolutionContributionCalendarModel,
+} from "@/lib/resolutionContributionCalendar";
 import type { FrictionReport } from "@/types";
 
-export interface ResolutionAnalyticsOptions {
-  hourlyRate: number;
-}
+export * from "./resolutionContributionCalendar";
 
-export function getResolvedReports(reports: FrictionReport[]): FrictionReport[] {
-  return reports.filter((r) => r.status === "resolved");
-}
+/** @deprecated Use ResolutionContributionCalendarModel */
+export type GithubResolutionHeatmapModel = ResolutionContributionCalendarModel;
 
 export function getUnresolvedReports(reports: FrictionReport[]): FrictionReport[] {
   return reports.filter((r) => r.status !== "resolved");
-}
-
-/** Calendar day used for bucketing resolved impact (UTC date key YYYY-MM-DD). */
-export function resolutionDateKeyForReport(r: FrictionReport): string | null {
-  if (r.status !== "resolved") return null;
-  const raw = r.resolvedAt ?? r.updatedAt ?? r.createdAt;
-  try {
-    const d = new Date(raw);
-    if (Number.isNaN(d.getTime())) return null;
-    return d.toISOString().slice(0, 10);
-  } catch {
-    return null;
-  }
-}
-
-export interface ResolutionDayBucket {
-  dateKey: string;
-  resolvedCount: number;
-  hoursSaved: number;
-  costSaved: number;
-  reports: FrictionReport[];
 }
 
 function startOfUtcDay(d: Date): Date {
@@ -44,38 +33,12 @@ function addUtcDays(d: Date, n: number): Date {
   return x;
 }
 
-function dateKeyUtc(d: Date): string {
-  return d.toISOString().slice(0, 10);
-}
-
-/** Per-calendar-day totals for resolved reports in [start, end] inclusive (UTC days). */
-export function getResolutionActivityByDay(
-  reports: FrictionReport[],
-  options: ResolutionAnalyticsOptions & { startDate: Date; endDate: Date },
-): ResolutionDayBucket[] {
-  const { hourlyRate, startDate, endDate } = options;
-  const start = startOfUtcDay(startDate);
-  const end = startOfUtcDay(endDate);
-  const map = new Map<string, ResolutionDayBucket>();
-
-  for (let d = new Date(start); d.getTime() <= end.getTime(); d = addUtcDays(d, 1)) {
-    const key = dateKeyUtc(d);
-    map.set(key, { dateKey: key, resolvedCount: 0, hoursSaved: 0, costSaved: 0, reports: [] });
-  }
-
-  for (const r of getResolvedReports(reports)) {
-    const key = resolutionDateKeyForReport(r);
-    if (!key || !map.has(key)) continue;
-    const h = calculateMonthlyHours(r);
-    const c = Math.round(calculateMonthlyCost(r, hourlyRate));
-    const b = map.get(key)!;
-    b.resolvedCount += 1;
-    b.hoursSaved += h;
-    b.costSaved += c;
-    b.reports.push(r);
-  }
-
-  return [...map.keys()].sort().map((k) => map.get(k)!);
+/** Monday UTC week start key YYYY-MM-DD. */
+export function startOfWeekMondayUtc(d: Date): Date {
+  const c = startOfUtcDay(d);
+  const day = c.getUTCDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  return addUtcDays(c, diff);
 }
 
 export interface ResolutionWeekBucket {
@@ -86,17 +49,9 @@ export interface ResolutionWeekBucket {
   reports: FrictionReport[];
 }
 
-/** Monday UTC week start key YYYY-MM-DD. */
-export function startOfWeekMondayUtc(d: Date): Date {
-  const c = startOfUtcDay(d);
-  const day = c.getUTCDay();
-  const diff = day === 0 ? -6 : 1 - day;
-  return addUtcDays(c, diff);
-}
-
 export function getResolutionActivityByWeek(
   reports: FrictionReport[],
-  options: ResolutionAnalyticsOptions & { startDate: Date; endDate: Date },
+  options: { hourlyRate: number; startDate: Date; endDate: Date },
 ): ResolutionWeekBucket[] {
   const { hourlyRate, startDate, endDate } = options;
   const start = startOfWeekMondayUtc(startDate);
@@ -184,11 +139,15 @@ export function getResolutionSummary(reports: FrictionReport[], hourlyRate: numb
 
 export function getRecentResolvedReports(reports: FrictionReport[], limit: number): FrictionReport[] {
   const resolved = getResolvedReports(reports);
-  return [...resolved].sort((a, b) => {
-    const ta = new Date(a.resolvedAt ?? a.updatedAt ?? a.createdAt).getTime();
-    const tb = new Date(b.resolvedAt ?? b.updatedAt ?? b.createdAt).getTime();
-    return tb - ta;
-  }).slice(0, limit);
+  return [...resolved]
+    .sort((a, b) => {
+      const ka = resolutionDateKeyForReport(a);
+      const kb = resolutionDateKeyForReport(b);
+      const ta = ka ? new Date(`${ka}T12:00:00.000Z`).getTime() : new Date(a.updatedAt ?? a.createdAt).getTime();
+      const tb = kb ? new Date(`${kb}T12:00:00.000Z`).getTime() : new Date(b.updatedAt ?? b.createdAt).getTime();
+      return tb - ta;
+    })
+    .slice(0, limit);
 }
 
 export interface ResolvedImpactRow {
@@ -224,46 +183,77 @@ export function getResolvedImpactByProcess(reports: FrictionReport[], hourlyRate
     .sort((a, b) => b.monthlyCostAddressed - a.monthlyCostAddressed);
 }
 
-export interface HeatmapCell {
-  dateKey: string;
-  resolvedCount: number;
-  hoursSaved: number;
-  costSaved: number;
-  /** 0 = empty, 1–4 intensity */
-  level: number;
-  label: string;
+/** @deprecated Prefer buildContributionCalendar */
+export function buildGithubResolutionHeatmap(
+  reports: FrictionReport[],
+  hourlyRate: number,
+  options:
+    | { kind: "year"; year: number; today?: Date }
+    | { kind: "rolling"; endDate: Date; weekCount: number },
+  formatMoney: (n: number) => string,
+): ResolutionContributionCalendarModel {
+  if (options.kind === "year") {
+    return buildContributionCalendar(
+      reports,
+      hourlyRate,
+      { mode: "year", year: options.year, today: options.today },
+      formatMoney,
+    );
+  }
+  return buildContributionCalendar(
+    reports,
+    hourlyRate,
+    { mode: "rolling", endDate: options.endDate, weekCount: options.weekCount },
+    formatMoney,
+  );
 }
 
-function intensityLevel(cost: number, maxCost: number): number {
-  if (cost <= 0) return 0;
-  if (maxCost <= 0) return 1;
-  const t = cost / maxCost;
-  if (t < 0.25) return 1;
-  if (t < 0.5) return 2;
-  if (t < 0.75) return 3;
-  return 4;
+export function resolutionTooltipLine(
+  cell: HeatmapCell,
+  formatMoney: (n: number) => string,
+  layout: ResolutionContributionCalendarModel["layout"] = "calendar-year",
+): string {
+  return contributionTooltipText(cell, formatMoney, layout);
 }
 
-/** Last `dayCount` UTC days ending at `endDate` (inclusive), for contribution-style grid. */
+/** @deprecated Prefer buildContributionCalendar year/rolling modes */
 export function buildResolutionHeatmapDays(
   reports: FrictionReport[],
   hourlyRate: number,
   endDate: Date,
   dayCount: number,
+  formatMoney: (n: number) => string,
 ): HeatmapCell[] {
   const end = startOfUtcDay(endDate);
   const start = addUtcDays(end, -(dayCount - 1));
   const buckets = getResolutionActivityByDay(reports, { hourlyRate, startDate: start, endDate: end });
-  const maxCost = Math.max(1, ...buckets.map((b) => b.costSaved));
-  return buckets.map((b) => ({
-    dateKey: b.dateKey,
-    resolvedCount: b.resolvedCount,
-    hoursSaved: b.hoursSaved,
-    costSaved: b.costSaved,
-    level: intensityLevel(b.costSaved, maxCost),
-    label:
+  const maxCost = Math.max(0, ...buckets.map((b) => b.costSaved));
+  const maxCount = Math.max(0, ...buckets.map((b) => b.resolvedCount));
+  const useCost = maxCost > 0;
+  return buckets.map((b) => {
+    const level =
+      useCost ? getContributionLevel(b.costSaved, maxCost) : getContributionLevel(b.resolvedCount, Math.max(1, maxCount));
+    const dayKind = "eligible" as const;
+    const cell: ContributionCalendarCell = {
+      dateKey: b.dateKey,
+      resolvedCount: b.resolvedCount,
+      hoursSaved: b.hoursSaved,
+      costSaved: b.costSaved,
+      level,
+      label: "",
+      prettyDate: formatUtcDateKeyLong(b.dateKey),
+      reports: b.reports,
+      dayKind,
+      elapsedInSelectedYear: dayKind === "eligible",
+    };
+    cell.label =
       b.resolvedCount === 0
-        ? `${b.dateKey}: no frictions resolved`
-        : `${b.dateKey}: ${b.resolvedCount} resolved, est. ${b.hoursSaved.toFixed(1)} hrs/mo and ${b.costSaved} cost/mo addressed`,
-  }));
+        ? `${formatUtcDateKeyLong(b.dateKey)}: no frictions resolved`
+        : `${formatUtcDateKeyLong(b.dateKey)}: ${b.resolvedCount} resolved, ${b.hoursSaved.toFixed(1)} hrs/mo, ${formatMoney(b.costSaved)}/mo`;
+    return cell;
+  });
+}
+
+export function intensityLevelFromCount(count: number, maxCount: number): number {
+  return getContributionLevel(count, Math.max(1, maxCount));
 }
