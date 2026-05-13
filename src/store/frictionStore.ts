@@ -22,7 +22,23 @@ import {
   sanitizeIntegrationSettings,
   type IntegrationSettings,
 } from "@/constants/integrationSettings";
-import { STORAGE_KEY_PRIMARY, PERSIST_STORE_VERSION } from "@/constants/persist";
+import { MY_REPORT_IDS_KEY, STORAGE_KEY_PRIMARY, PERSIST_STORE_VERSION } from "@/constants/persist";
+
+function readMyReportIds(): Set<string> {
+  try {
+    const raw = window.localStorage.getItem(MY_REPORT_IDS_KEY);
+    const parsed = raw ? (JSON.parse(raw) as unknown) : [];
+    return new Set(Array.isArray(parsed) ? (parsed as string[]) : []);
+  } catch { return new Set(); }
+}
+
+function saveMyReportId(id: string): void {
+  try {
+    const ids = readMyReportIds();
+    ids.add(id);
+    window.localStorage.setItem(MY_REPORT_IDS_KEY, JSON.stringify([...ids]));
+  } catch { /* ignore */ }
+}
 import { cloneScenarioReports } from "@/data/demoScenarios";
 import {
   DEMO_SCENARIO_LABELS,
@@ -225,9 +241,13 @@ function sanitizeReportsArray(raw: unknown): SanitizedReportsOutcome {
 
 function newReportId(): string {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
-    return `f-${crypto.randomUUID().replace(/-/g, "").slice(0, 10)}`;
+    return crypto.randomUUID();
   }
-  return `f-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`;
+  // fallback: rfc4122 v4 UUID
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    return (c === "x" ? r : (r & 0x3) | 0x8).toString(16);
+  });
 }
 
 interface FrictionStoreState {
@@ -465,6 +485,11 @@ export const useFrictionStore = create<FrictionStoreState>()(
             const localFallback = get().reports;
             next = localFallback.length > 0 ? localFallback : getDefaultReportsSnapshot();
           }
+          // Restore whoLabel for reports submitted on this device.
+          const myIds = readMyReportIds();
+          if (myIds.size > 0) {
+            next = next.map((r) => (myIds.has(r.id) ? { ...r, whoLabel: "You" } : r));
+          }
           set({
             reports: next,
             dataConnectionMode: res.mode,
@@ -513,6 +538,7 @@ export const useFrictionStore = create<FrictionStoreState>()(
           whoLabel: "You",
         };
 
+        saveMyReportId(id);
         set((state) => ({
           reports: [report, ...state.reports],
         }));

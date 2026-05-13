@@ -119,10 +119,11 @@ export async function createReport(report: FrictionReport): Promise<RepositoryRe
   }
   const { data, error } = await supabase.from(REPORTS_TABLE).insert(toDbRow(report)).select("*").single();
   if (error) {
+    console.error("[reportRepository] createReport failed:", error);
     return {
       data: report,
       mode: "offline-fallback",
-      warning: "Could not save report to Supabase. Kept in local mode.",
+      warning: `Could not save report to Supabase: ${error.message}`,
     };
   }
   return {
