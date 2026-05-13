@@ -299,6 +299,38 @@ h3 { font-size: 16px; }
   transform: translateY(-2px);
 }
 
+/* Integrations — brand marks beside card titles */
+.integration-brand-mark {
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  display: grid;
+  place-items: center;
+  box-shadow: var(--shadow-sm);
+}
+.integration-brand-mark svg {
+  display: block;
+}
+.integration-brand-mark__img {
+  display: block;
+  object-fit: contain;
+}
+.integration-brand-mark-pair {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.integration-brand-mark.integration-brand-mark--compact {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+}
+
 /* Buttons */
 .btn {
   display: inline-flex; align-items: center; gap: 8px;

@@ -8,6 +8,14 @@ import { buildSlackSummaryMessage, buildTrackerTicketMarkdown, buildTrackerTicke
 import { liveCreateJiraIssue, liveCreateLinearIssue, livePostSlackSummary } from "@/lib/integrationsLive";
 import { generateRoadmapItems } from "@/lib/roadmap";
 import { isSupabaseConfigured } from "@/lib/supabase";
+import {
+  CsvExportBrandMark,
+  CsvImportBrandMark,
+  JiraBrandMark,
+  LinearBrandMark,
+  NotionDocsBrandMark,
+  SlackBrandMark,
+} from "@/components/integrations/IntegrationBrandMarks";
 import { useFrictionStore } from "@/store/frictionStore";
 import type { DerivedRoadmapItem } from "@/types";
 
@@ -72,6 +80,8 @@ function IntegrationCard({
   subtitle,
   status,
   footNote,
+  mark,
+  markLayout = "default",
   children,
 }: {
   title: string;
@@ -79,17 +89,28 @@ function IntegrationCard({
   status: CardStatus;
   /** Replaces default privacy / live hint under the title row. */
   footNote?: string;
+  /** Optional brand mark shown left of the title (decorative). */
+  mark?: ReactNode;
+  markLayout?: "default" | "dual";
   children: ReactNode;
 }) {
   const pill = statusPill(status);
   const defaultFoot =
     "Copy and CSV stay in your browser. Live Slack/Jira/Linear calls go through Supabase Edge Functions — credentials are stored as Function secrets, not in the SPA.";
+  const markWrapClass = markLayout === "dual" ? "integration-brand-mark-pair" : "integration-brand-mark";
   return (
     <section className="card" style={{ padding: 20, height: "100%", display: "flex", flexDirection: "column", gap: 12 }}>
       <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", gap: 8, alignItems: "start" }}>
-        <div>
-          <h2 style={{ fontSize: 17, margin: "0 0 4px", fontWeight: 600 }}>{title}</h2>
-          <p style={{ margin: 0, fontSize: 13, color: "var(--ink-soft)", lineHeight: 1.45 }}>{subtitle}</p>
+        <div style={{ display: "flex", gap: 12, alignItems: "flex-start", flex: 1, minWidth: 0 }}>
+          {mark ? (
+            <div className={markWrapClass} aria-hidden>
+              {mark}
+            </div>
+          ) : null}
+          <div style={{ minWidth: 0 }}>
+            <h2 style={{ fontSize: 17, margin: "0 0 4px", fontWeight: 600 }}>{title}</h2>
+            <p style={{ margin: 0, fontSize: 13, color: "var(--ink-soft)", lineHeight: 1.45 }}>{subtitle}</p>
+          </div>
         </div>
         <span className={pill.className} style={{ fontSize: 11, flexShrink: 0 }}>
           <span className="dot" aria-hidden />
@@ -405,6 +426,7 @@ export function IntegrationsPage() {
           title="Slack"
           subtitle="Weekly-style summary for leadership channels — copy/paste or post via Incoming Webhook."
           status={supabaseReady ? "hybrid" : "local"}
+          mark={<SlackBrandMark />}
         >
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
             <button type="button" className="btn coral" onClick={onSlackGenerate} disabled={liveBusy !== "idle"}>
@@ -447,6 +469,7 @@ export function IntegrationsPage() {
           title="Jira"
           subtitle="Markdown drafts for your backlog, or create a real issue in Jira Cloud via Edge Function."
           status={trackerCardStatus}
+          mark={<JiraBrandMark />}
         >
           <RoadmapTicketControls
             roadmap={roadmap}
@@ -467,6 +490,7 @@ export function IntegrationsPage() {
           title="Linear"
           subtitle="Markdown drafts or create a real Linear issue (GraphQL) via Edge Function."
           status={trackerCardStatus}
+          mark={<LinearBrandMark />}
         >
           <p style={{ margin: "0 0 8px", fontSize: 13, color: "var(--ink-soft)" }}>
             Pick a roadmap item in the Jira card, generate a draft, then copy or create live here.
@@ -491,6 +515,7 @@ export function IntegrationsPage() {
           title="CSV import"
           subtitle="Paste CSV rows exported from a spreadsheet. Header row must match the template."
           status="mock"
+          mark={<CsvImportBrandMark />}
         >
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 10 }}>
             <button type="button" className="btn secondary" onClick={onDownloadTemplate}>
@@ -557,6 +582,7 @@ export function IntegrationsPage() {
           title="CSV export"
           subtitle="Download all friction reports or a roadmap summary for spreadsheets and exec packs."
           status="mock"
+          mark={<CsvExportBrandMark />}
         >
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             <button type="button" className="btn coral" onClick={onExportReports} disabled={!reports.length}>
@@ -572,6 +598,8 @@ export function IntegrationsPage() {
           title="Notion / Docs"
           subtitle="Sync a living friction register to Notion or Google Docs — planned for a future release."
           status="soon"
+          mark={<NotionDocsBrandMark />}
+          markLayout="dual"
         >
           <button type="button" className="btn secondary" disabled>
             Connect (coming soon)
