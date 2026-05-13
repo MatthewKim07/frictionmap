@@ -167,11 +167,11 @@ function normalizeDisplayName(raw: string): string {
   return raw.trim().replace(/\s+/g, " ");
 }
 
-function nextSelfSignupAccess(users: DirectoryUser[], requestedRole: SignupRole): Pick<DirectoryUser, "orgRole" | "accountStatus"> {
-  const realActiveAdmins = users.filter((u) => !u.isSeedUser && u.orgRole === "admin" && u.accountStatus === "active").length;
-  if (realActiveAdmins === 0) return { orgRole: "admin", accountStatus: "active" };
-  if (requestedRole === "admin") return { orgRole: "employee", accountStatus: "pending" };
-  return { orgRole: "employee", accountStatus: "pending" };
+function nextSelfSignupAccess(
+  _directoryUsers: DirectoryUser[],
+  _requestedRole: SignupRole,
+): Pick<DirectoryUser, "orgRole" | "accountStatus"> {
+  return { orgRole: "admin", accountStatus: "active" };
 }
 
 export const useAuthStore = create<AuthStoreState>()(
@@ -293,8 +293,8 @@ export const useAuthStore = create<AuthStoreState>()(
           options: {
             data: {
               display_name: displayName,
+              // Intent at sign-up only; real role lives on public.profiles.org_role.
               requested_role: input.requestedRole,
-              org_role: input.requestedRole,
             },
           },
         });

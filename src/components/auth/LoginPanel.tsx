@@ -132,8 +132,8 @@ export function LoginPanel() {
           <h2 id="auth-panel-title">{mode === "sign-in" ? "Sign in to FrictionMap" : "Create your account"}</h2>
           <p>
             {mode === "sign-in"
-              ? "Use your work email and password. Employee accounts must be approved before the app opens."
-              : "Choose the access you need. The first account becomes the workspace administrator; later employees wait for approval."}
+              ? "Use your work email and password. New accounts may stay pending until an active administrator approves them."
+              : "Choose the access you need. Everyone gets an active administrator account on this workspace (you can still narrow roles later in Settings)."}
           </p>
         </div>
 

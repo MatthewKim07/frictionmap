@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { useState } from "react";
 
 import { SupabaseAuthSync } from "@/components/auth/SupabaseAuthSync";
 import { BrandWordmark } from "@/components/brand/BrandWordmark";
@@ -9,6 +10,8 @@ import { PersistHydrationNotifier } from "@/components/layout/PersistHydrationNo
 import { DEFAULT_COMPANY_NAME, SIMULATION_ROLE_LABELS } from "@/constants/companySettings";
 import { useEffectiveOrgRole, useSessionUser } from "@/hooks/useEffectiveOrgRole";
 import { canOpenBusinessImpactReport, pagesAllowedForRole } from "@/lib/roleAccess";
+import { getSupabaseClient, isSupabaseConfigured } from "@/lib/supabase";
+import { bootstrapWorkspaceAdminIfOrphaned, fetchProfileForUser } from "@/lib/supabaseProfile";
 import { SENIORITY_LABELS } from "@/types/orgDirectory";
 import { useAuthStore } from "@/store/authStore";
 import { useFrictionStore } from "@/store/frictionStore";
@@ -43,8 +46,11 @@ export function AppShell({ children }: { children: ReactNode }) {
   const effectiveRole = useEffectiveOrgRole();
   const sessionUser = useSessionUser();
   const setLoginPanelOpen = useAuthStore((s) => s.setLoginPanelOpen);
+  const setRemoteProfile = useAuthStore((s) => s.setRemoteProfile);
   const signOut = useAuthStore((s) => s.signOut);
   const pendingUser = sessionUser?.accountStatus === "pending" ? sessionUser : null;
+  const [bootstrapBusy, setBootstrapBusy] = useState(false);
+  const [bootstrapRecoveryState, setBootstrapRecoveryState] = useState<{ code: string; message: string } | null>(null);
 
   const allowedTabs = pagesAllowedForRole(effectiveRole);
   const visibleTabs = TABS.filter((t) => allowedTabs.includes(t.id));
@@ -52,9 +58,39 @@ export function AppShell({ children }: { children: ReactNode }) {
   const orgLabel = companyName.trim() && companyName.trim() !== DEFAULT_COMPANY_NAME ? companyName.trim() : null;
   const emphasis = emphasizedTabIds(effectiveRole);
   const handleSignOut = () => {
+    setBootstrapRecoveryState(null);
     signOut();
     syncPageForAuthChange();
     pulseToast("Signed out.");
+  };
+
+  const handleBootstrapWorkspace = async () => {
+    if (!pendingUser) return;
+    const sb = getSupabaseClient();
+    if (!sb) return;
+    setBootstrapRecoveryState(null);
+    setBootstrapBusy(true);
+    try {
+      const result = await bootstrapWorkspaceAdminIfOrphaned(sb);
+      if (result.ok) {
+        setBootstrapRecoveryState(null);
+        const session = (await sb.auth.getSession()).data.session;
+        if (session?.user) {
+          const prof = await fetchProfileForUser(sb, session.user.id, session.user.email ?? pendingUser.email);
+          if (prof) setRemoteProfile(prof);
+        }
+        pulseToast("Workspace activated. You are now an administrator.");
+      } else {
+        setBootstrapRecoveryState({ code: result.code, message: result.message });
+        pulseToast(
+          result.code === "admin_exists"
+            ? "Another active admin is on file in Supabase — see details below."
+            : result.message,
+        );
+      }
+    } finally {
+      setBootstrapBusy(false);
+    }
   };
 
   const roleStrip =
@@ -93,7 +129,13 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
         </header>
 
-        <PendingAccessScreen user={pendingUser} onSignOut={handleSignOut} />
+        <PendingAccessScreen
+          user={pendingUser}
+          onSignOut={handleSignOut}
+          onBootstrapWorkspace={isSupabaseConfigured() ? handleBootstrapWorkspace : undefined}
+          bootstrapBusy={bootstrapBusy}
+          bootstrapRecoveryState={bootstrapRecoveryState}
+        />
 
         {toast && (
           <div className="toast" role="status">
